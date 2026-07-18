@@ -452,6 +452,8 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
 
       if (updateError) throw updateError;
 
+      Swal.fire({ ...swalBase, icon: "success", title: "บันทึกสำเร็จ", text: "บันทึกข้อมูลและตัดสต็อกเรียบร้อยแล้ว", timer: 1500, showConfirmButton: false });
+
       resetForm();
       fetchDrugs(departmentId);
       if (onSaved) onSaved();
