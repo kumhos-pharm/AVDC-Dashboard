@@ -52,7 +52,7 @@ export default function DispensePage() {
     <div className="min-h-screen w-full bg-[#eef1f6] p-4 font-['Kanit'] md:p-6 flex flex-col justify-between">
       
       {/* ส่วนเนื้อหาหลักด้านบน */}
-      <div className="mx-auto w-full max-w-6xl space-y-4 flex-grow">
+      <div className="mx-auto w-full max-w-[1600px] space-y-4 flex-grow">
         
         {/* ================= ส่วน Header ดีไซน์ใหม่ใส่โลโก้ AVDC ================= */}
         <div className="relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between rounded-2xl bg-gradient-to-br from-[#eaf4ff] via-white to-[#f1faf5] p-4 md:p-5 shadow-[0_6px_24px_-8px_rgba(15,23,42,0.12)] gap-4 border border-white">
@@ -145,7 +145,7 @@ export default function DispensePage() {
       <footer className="relative w-full mt-12 py-6">
         {/* แถบสีบางๆ ด้านบน footer แบบเดียวกับที่ขอบล่างของหัว ให้เข้าธีมเดียวกันทั้งหน้า */}
         <div className="pointer-events-none absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-[#007bff] via-[#4a9bd1] to-[#198754]" />
-        <div className="mx-auto max-w-6xl px-4 flex flex-col items-center justify-center gap-3 text-center">
+        <div className="mx-auto max-w-[1600px] px-4 flex flex-col items-center justify-center gap-3 text-center">
           
           {/* บรรทัดบน: กลุ่มงานและระบบ */}
           <div className="flex items-center gap-2">

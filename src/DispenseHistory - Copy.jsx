@@ -102,7 +102,7 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
         <h2 className="flex items-center gap-2 text-lg font-bold text-[#198754]">
           <History className="h-5 w-5" /> ประวัติบันทึกล่าสุด
         </h2>
-        <span className="rounded bg-[#198754] px-2.5 py-0.5 text-sm text-white font-medium">
+        <span className="rounded bg-[#198754] px-2.5 py-0.5 text-xs text-white font-medium">
           เรียงล่าสุด
         </span>
       </div>
@@ -141,8 +141,8 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
                   <span className="h-2 w-2 rounded-full bg-[#198754]" />
                   {date.split(' ')[0]} {date.split(' ')[1]}
                 </span>
-                <span className="text-sm font-bold text-[#198754]">{date.split(' ')[2]}</span>
-                <span className="mt-1 text-[12px] text-slate-500 flex items-center gap-1 justify-center">
+                <span className="text-xs font-bold text-[#198754]">{date.split(' ')[2]}</span>
+                <span className="mt-1 text-[11px] text-slate-500 flex items-center gap-1 justify-center">
                   🕒 {time}
                 </span>
               </div>
@@ -156,7 +156,7 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
                   <span className="font-bold text-slate-800">
                     {r.patient_prefix}{r.patient_name || "-"}
                   </span>
-                  <span className="rounded-full bg-slate-500 px-2 py-0.5 text-[11px] font-bold text-white">
+                  <span className="rounded-full bg-slate-500 px-2 py-0.5 text-[10px] font-bold text-white">
                     HN: {r.patient_hn || "-"}
                   </span>
                 </div>
@@ -165,12 +165,12 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
                 <div className="text-sm font-extrabold text-[#1d68a4] flex items-center gap-1">
                   🔗 {r.drug_name}
                   {r.strength && (
-                    <span className="text-sm font-bold text-[#4a9bd1]">({r.strength})</span>
+                    <span className="text-xs font-bold text-[#4a9bd1]">({r.strength})</span>
                   )}
                 </div>
 
                 {/* แถวที่ 3: รายละเอียด Lot, จำนวน และ วันหมดอายุ */}
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-600">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
                   <span>
                     Lot: <span className="font-semibold text-slate-700">{r.lot || "-"}</span>
                   </span>
@@ -184,13 +184,13 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
                     </span>{" "}
                     <span className="text-slate-500">{r.unit || "Vial"}</span>
                   </span>
-                  <span className="ml-auto text-[12px] font-bold bg-red-50 text-red-600 px-2 py-0.5 rounded border border-red-100">
+                  <span className="ml-auto text-[11px] font-bold bg-red-50 text-red-600 px-2 py-0.5 rounded border border-red-100">
                     Exp: {formatExpDate(r.exp_date)}
                   </span>
                 </div>
 
                 {/* แถวที่ 4: ผู้บันทึก/ผู้จ่าย */}
-                <div className="pt-1 border-t border-dashed border-slate-100 text-[12px] text-slate-500 flex items-center gap-1.5">
+                <div className="pt-1 border-t border-dashed border-slate-100 text-[11px] text-slate-500 flex items-center gap-1.5">
                   <span className="opacity-75">👤 ผู้จ่าย:</span>
                   <span className="font-medium text-slate-700">{r.staff_name || "ไม่ระบุ"}</span>
                 </div>
@@ -223,7 +223,7 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
 
       {/* ส่วน Pagination */}
       {!loading && rows.length > 0 && (
-        <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-sm text-slate-500">
+        <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500">
           <span>
             แสดงหน้า <span className="font-bold text-slate-700">{currentPage}</span> จากทั้งหมด{" "}
             <span className="font-bold text-slate-700">{totalPages}</span> หน้า
