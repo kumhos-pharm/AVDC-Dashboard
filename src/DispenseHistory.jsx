@@ -30,6 +30,11 @@ function formatExpDate(dateString) {
   return `${day}-${month}-${buddhistYear}`;
 }
 
+// อ่านยอดคงเหลือของล็อตนี้ (มาจาก useDispenseHistory ที่ผูก remaining_qty ให้แต่ละแถวแล้ว)
+function remainingQty(r) {
+  return r.remaining_qty === null || r.remaining_qty === undefined ? null : r.remaining_qty;
+}
+
 const ITEMS_PER_PAGE = 5;
 
 // ตั้งค่าธีมสีของ SweetAlert ให้เข้ากับฟอนต์/โทนสีของระบบ
@@ -171,6 +176,13 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
                   </span>
                   <span>
                     จ่าย: <span className="font-bold text-red-600">{Math.abs(r.change_qty)}</span> <span className="text-slate-500">{r.unit || "Vial"}</span>
+                  </span>
+                  <span>
+                    คงเหลือ:{" "}
+                    <span className="font-bold text-emerald-600">
+                      {remainingQty(r) !== null ? remainingQty(r) : "-"}
+                    </span>{" "}
+                    <span className="text-slate-500">{r.unit || "Vial"}</span>
                   </span>
                   <span className="ml-auto text-[11px] font-bold bg-red-50 text-red-600 px-2 py-0.5 rounded border border-red-100">
                     Exp: {formatExpDate(r.exp_date)}

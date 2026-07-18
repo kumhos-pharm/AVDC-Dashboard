@@ -47,11 +47,13 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
   const [staffList, setStaffList] = useState([]);
   const [filteredStaff, setFilteredStaff] = useState([]);
   const [showStaffDropdown, setShowStaffDropdown] = useState(false);
+  const [staffHighlightIndex, setStaffHighlightIndex] = useState(-1);
 
   // รายการยาที่จ่ายได้ (จาก view v_dispensable_lots)
   const [drugList, setDrugList] = useState([]);
   const [filteredDrugs, setFilteredDrugs] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [drugHighlightIndex, setDrugHighlightIndex] = useState(-1);
   const [drugFetchError, setDrugFetchError] = useState("");
 
   const [loading, setLoading] = useState(false);
@@ -175,6 +177,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
   const handleSearchStaffChange = (e) => {
     const value = e.target.value;
     setFormData((prev) => ({ ...prev, staff: value }));
+    setStaffHighlightIndex(-1);
 
     if (value.trim() === "") {
       setFilteredStaff([]);
@@ -192,11 +195,33 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
   const handleSelectStaff = (staffMember) => {
     setFormData((prev) => ({ ...prev, staff: staffMember.name }));
     setShowStaffDropdown(false);
+    setStaffHighlightIndex(-1);
+  };
+
+  // เลื่อนเลือกรายชื่อผู้จ่ายด้วยลูกศร ขึ้น/ลง และยืนยันด้วย Enter
+  const handleStaffKeyDown = (e) => {
+    if (!showStaffDropdown || filteredStaff.length === 0) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setStaffHighlightIndex((prev) => (prev + 1) % filteredStaff.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setStaffHighlightIndex((prev) => (prev - 1 + filteredStaff.length) % filteredStaff.length);
+    } else if (e.key === "Enter") {
+      if (staffHighlightIndex >= 0 && staffHighlightIndex < filteredStaff.length) {
+        e.preventDefault();
+        handleSelectStaff(filteredStaff[staffHighlightIndex]);
+      }
+    } else if (e.key === "Escape") {
+      setShowStaffDropdown(false);
+    }
   };
 
   const handleSearchDrugChange = (e) => {
     const value = e.target.value;
     setFormData((prev) => ({ ...prev, searchDrug: value }));
+    setDrugHighlightIndex(-1);
 
     if (value.trim() === "") {
       setFilteredDrugs([]);
@@ -228,6 +253,27 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
       maxQuantity: drug.quantity,
     }));
     setShowDropdown(false);
+    setDrugHighlightIndex(-1);
+  };
+
+  // เลื่อนเลือกรายการยาด้วยลูกศร ขึ้น/ลง และยืนยันด้วย Enter
+  const handleDrugKeyDown = (e) => {
+    if (!showDropdown || filteredDrugs.length === 0) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setDrugHighlightIndex((prev) => (prev + 1) % filteredDrugs.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setDrugHighlightIndex((prev) => (prev - 1 + filteredDrugs.length) % filteredDrugs.length);
+    } else if (e.key === "Enter") {
+      if (drugHighlightIndex >= 0 && drugHighlightIndex < filteredDrugs.length) {
+        e.preventDefault();
+        handleSelectDrug(filteredDrugs[drugHighlightIndex]);
+      }
+    } else if (e.key === "Escape") {
+      setShowDropdown(false);
+    }
   };
 
   const formatDate = (dateStr) => {
@@ -322,6 +368,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
         drug_id: formData.drugId,
         department_id: departmentId,
         lot: formData.lotNumber,
+        lot_row_id: formData.lotRowId || editingRow.lot_row_id || null,
         mfg_date: formData.mfgDateRaw || null,
         exp_date: formData.expDateRaw || null,
         note: editingRow.note,
@@ -385,6 +432,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
             note: null,
             staff_name: formData.staff,
             lot: formData.lotNumber,
+            lot_row_id: formData.lotRowId,
             mfg_date: formData.mfgDateRaw || null,
             exp_date: formData.expDateRaw || null,
             patient_prefix: formData.prefix,
@@ -538,17 +586,21 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#007bff] focus:outline-none focus:ring-2 focus:ring-[#007bff] h-10"
             value={formData.staff}
             onChange={handleSearchStaffChange}
+            onKeyDown={handleStaffKeyDown}
             onFocus={() => { if (formData.staff) setShowStaffDropdown(true); }}
             onBlur={() => setTimeout(() => setShowStaffDropdown(false), 150)}
           />
 
           {showStaffDropdown && filteredStaff.length > 0 && (
             <div className="absolute z-10 w-full mt-1 max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-md">
-              {filteredStaff.map((s) => (
+              {filteredStaff.map((s, idx) => (
                 <div
                   key={s.id}
                   onMouseDown={() => handleSelectStaff(s)}
-                  className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-xs border-b border-slate-50"
+                  onMouseEnter={() => setStaffHighlightIndex(idx)}
+                  className={`px-3 py-2 cursor-pointer text-xs border-b border-slate-50 ${
+                    idx === staffHighlightIndex ? "bg-blue-50" : "hover:bg-blue-50"
+                  }`}
                 >
                   <strong className="text-slate-800">{s.name}</strong>
                   {s.role && (
@@ -572,6 +624,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#007bff] focus:outline-none focus:ring-2 focus:ring-[#007bff] h-10 disabled:bg-slate-50 disabled:cursor-not-allowed"
             value={formData.searchDrug}
             onChange={handleSearchDrugChange}
+            onKeyDown={handleDrugKeyDown}
             onFocus={() => { if (formData.searchDrug) setShowDropdown(true); }}
             onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
           />
@@ -586,11 +639,14 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
 
           {showDropdown && filteredDrugs.length > 0 && (
             <div className="absolute z-10 w-full mt-1 max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-md">
-              {filteredDrugs.map((drug) => (
+              {filteredDrugs.map((drug, idx) => (
                 <div
                   key={drug.lot_row_id}
                   onMouseDown={() => handleSelectDrug(drug)}
-                  className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-xs border-b border-slate-50 leading-relaxed"
+                  onMouseEnter={() => setDrugHighlightIndex(idx)}
+                  className={`px-3 py-2 cursor-pointer text-xs border-b border-slate-50 leading-relaxed ${
+                    idx === drugHighlightIndex ? "bg-blue-50" : "hover:bg-blue-50"
+                  }`}
                 >
                   <span className="text-emerald-600 font-bold">[คงเหลือ: {drug.quantity} {drug.unit || "หน่วย"}]</span>
                   {" "}

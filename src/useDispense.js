@@ -61,7 +61,47 @@ export function useDispenseHistory(searchTerm) {
       .eq("reason", "dispense")
       .order("created_at", { ascending: false })
       .limit(50);
-    setRows(data ?? []);
+
+    const dispenseRows = data ?? [];
+
+    // ดึงยอดคงเหลือ "ปัจจุบัน" ของล็อตที่เคยจ่ายไป มาผูกกับประวัติแต่ละรายการ (แสดงเป็น "คงเหลือ")
+    // จับคู่ด้วย lot_row_id (แม่นยำ 100% เพราะอ้าง drug_lots.id ตรง ๆ) เป็นหลัก
+    // ส่วนรายการเก่าก่อนมีคอลัมน์ lot_row_id จะ fallback ไปจับคู่ด้วย department_id + drug_id + lot (ข้อความ) แทน
+    if (dispenseRows.length > 0) {
+      const lotRowIds = [...new Set(dispenseRows.map((r) => r.lot_row_id).filter(Boolean))];
+      const departmentIds = [...new Set(dispenseRows.map((r) => r.department_id).filter(Boolean))];
+      const drugIds = [...new Set(dispenseRows.map((r) => r.drug_id).filter(Boolean))];
+
+      const [byIdRes, byTextRes] = await Promise.all([
+        lotRowIds.length > 0
+          ? supabase.from("drug_lots").select("id, quantity").in("id", lotRowIds)
+          : Promise.resolve({ data: [] }),
+        supabase
+          .from("drug_lots")
+          .select("department_id, drug_id, lot, quantity")
+          .in("department_id", departmentIds)
+          .in("drug_id", drugIds),
+      ]);
+
+      const idMap = new Map();
+      (byIdRes.data ?? []).forEach((l) => idMap.set(l.id, l.quantity));
+
+      const lotMap = new Map();
+      (byTextRes.data ?? []).forEach((l) => {
+        lotMap.set(`${l.department_id}|${l.drug_id}|${l.lot}`, l.quantity);
+      });
+
+      dispenseRows.forEach((r) => {
+        if (r.lot_row_id && idMap.has(r.lot_row_id)) {
+          r.remaining_qty = idMap.get(r.lot_row_id);
+          return;
+        }
+        const key = `${r.department_id}|${r.drug_id}|${r.lot}`;
+        r.remaining_qty = lotMap.has(key) ? lotMap.get(key) : null;
+      });
+    }
+
+    setRows(dispenseRows);
     setLoading(false);
   }, []);
 
