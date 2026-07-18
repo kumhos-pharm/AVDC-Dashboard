@@ -324,18 +324,18 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
     "https://script.google.com/macros/s/AKfycbyeSchVefRGqtLUtl-y0-daEKnmBziowBUynloUMIcqkk0zBviu7_JhuNolPaQ-AuESew/exec";
 
   // ส่งข้อความแจ้งเตือนเข้ากลุ่มไลน์ผ่าน Apps Script เดิม (ไม่บล็อกการบันทึก ถ้าส่งไม่สำเร็จแค่ log error ไว้เฉยๆ)
-  // ใช้ Content-Type: text/plain เพื่อเลี่ยง CORS preflight ที่ Apps Script Web App ไม่รองรับ
+  // ใช้ mode: "no-cors" เพราะ Apps Script Web App ไม่ส่ง Access-Control-Allow-Origin กลับมา
+  // ทำให้เบราว์เซอร์บล็อกการอ่าน response (แม้คำขอจะไปถึงเซิร์ฟเวอร์และทำงานจริงก็ตาม)
+  // ข้อแลกเปลี่ยน: จะอ่านผลลัพธ์สำเร็จ/ไม่สำเร็จจริงจากฝั่ง React ไม่ได้อีกต่อไป (response กลายเป็น opaque)
+  // แต่ไม่กระทบอะไร เพราะจุดประสงค์คือแค่ให้ข้อความไปถึงกลุ่มไลน์เท่านั้น
   const notifyLine = async (text) => {
     try {
-      const res = await fetch(GAS_NOTIFY_URL, {
+      await fetch(GAS_NOTIFY_URL, {
         method: "POST",
+        mode: "no-cors",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify({ message: text }),
       });
-      const result = await res.json().catch(() => null);
-      if (!res.ok || (result && result.status === "error")) {
-        console.error("แจ้งเตือนเข้า LINE ไม่สำเร็จ:", result || res.statusText);
-      }
     } catch (err) {
       console.error("แจ้งเตือนเข้า LINE ไม่สำเร็จ:", err.message);
     }
