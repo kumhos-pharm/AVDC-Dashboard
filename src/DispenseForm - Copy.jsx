@@ -481,7 +481,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
 
         {/* แถบแจ้งว่ากำลังแก้ไขรายการเดิม (แทนที่ popup) */}
         {isEditMode && (
-          <div className="flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <div className="flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
             <span>
               ✏️ กำลังแก้ไขรายการ: <strong>{formData.searchDrug || "-"}</strong>
               {formData.strength ? ` (${formData.strength})` : ""}
@@ -498,12 +498,12 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
 
         {/* หน่วยงานที่จ่าย ต้องเลือกก่อน เพราะสต็อก/ล็อตที่ค้นหาได้ผูกกับหน่วยงานนี้ */}
         <div>
-          <label className="mb-1 block text-xs font-bold text-[#2f8fdc]">หน่วยงานที่จ่าย *</label>
+          <label className="mb-1 block text-sm font-bold text-[#2f8fdc]">หน่วยงานที่จ่าย *</label>
           <select
             value={departmentId}
             onChange={handleDepartmentChange}
             required
-            className="w-full rounded-lg border border-[#2f8fdc] px-3 py-2 text-sm h-10 focus:outline-none focus:ring-2 focus:ring-[#2f8fdc]"
+            className="w-full rounded-lg border border-[#2f8fdc] px-3 py-2 text-sm h-11 focus:outline-none focus:ring-2 focus:ring-[#2f8fdc]"
           >
             <option value="">เลือกหน่วยงาน</option>
             {departments.map((d) => (
@@ -513,16 +513,16 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
             ))}
           </select>
           {!departmentId && (
-            <p className="mt-1 text-[11px] text-red-500">กรุณาเลือกหน่วยงานก่อนค้นหารายการยา</p>
+            <p className="mt-1 text-[12px] text-red-500">กรุณาเลือกหน่วยงานก่อนค้นหารายการยา</p>
           )}
         </div>
 
         {/* แถวที่ 1: คำนำหน้า, ชื่อ-นามสกุล, HN */}
         <div className="grid grid-cols-12 gap-3">
           <div className="col-span-3">
-            <label className="block text-xs font-bold text-slate-800 mb-1">คำนำหน้า</label>
+            <label className="block text-sm font-bold text-slate-800 mb-1">คำนำหน้า</label>
             <select 
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-[#007bff] focus:outline-none focus:ring-2 focus:ring-[#007bff] h-10"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-[#007bff] focus:outline-none focus:ring-2 focus:ring-[#007bff] h-11"
               value={formData.prefix}
               onChange={(e) => setFormData({...formData, prefix: e.target.value})}
             >
@@ -534,21 +534,21 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
             </select>
           </div>
           <div className="col-span-5">
-            <label className="block text-xs font-bold text-slate-800 mb-1">ชื่อ-นามสกุล ผู้ป่วย</label>
+            <label className="block text-sm font-bold text-slate-800 mb-1">ชื่อ-นามสกุล ผู้ป่วย</label>
             <input 
               type="text" 
               placeholder="ระบุชื่อผู้ป่วย"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#007bff] focus:outline-none focus:ring-2 focus:ring-[#007bff] h-10"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#007bff] focus:outline-none focus:ring-2 focus:ring-[#007bff] h-11"
               value={formData.patientName}
               onChange={(e) => setFormData({...formData, patientName: e.target.value})}
             />
           </div>
           <div className="col-span-4">
-            <label className="block text-xs font-bold text-slate-800 mb-1">HN</label>
+            <label className="block text-sm font-bold text-slate-800 mb-1">HN</label>
             <input 
               type="text" 
               placeholder="เลข HN"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#007bff] focus:outline-none focus:ring-2 focus:ring-[#007bff] h-10"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#007bff] focus:outline-none focus:ring-2 focus:ring-[#007bff] h-11"
               value={formData.hn}
               onChange={(e) => setFormData({...formData, hn: e.target.value})}
             />
@@ -558,19 +558,19 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
         {/* แถวที่ 2: วันที่จ่าย, เวลา */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-bold text-slate-800 mb-1">วันที่จ่าย</label>
+            <label className="block text-sm font-bold text-slate-800 mb-1">วันที่จ่าย</label>
             <input 
               type="date" 
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#007bff] focus:outline-none focus:ring-2 focus:ring-[#007bff] h-10"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#007bff] focus:outline-none focus:ring-2 focus:ring-[#007bff] h-11"
               value={formData.dispenseDate}
               onChange={(e) => setFormData({...formData, dispenseDate: e.target.value})}
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-800 mb-1">เวลา</label>
+            <label className="block text-sm font-bold text-slate-800 mb-1">เวลา</label>
             <input 
               type="time" 
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#007bff] focus:outline-none focus:ring-2 focus:ring-[#007bff] h-10"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#007bff] focus:outline-none focus:ring-2 focus:ring-[#007bff] h-11"
               value={formData.dispenseTime}
               onChange={(e) => setFormData({...formData, dispenseTime: e.target.value})}
             />
@@ -579,11 +579,11 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
 
         {/* แถวที่ 3: เจ้าหน้าที่ผู้จ่าย (ค้นหาแบบ autocomplete จากตาราง staff) */}
         <div className="relative">
-          <label className="block text-xs font-bold text-slate-800 mb-1">เภสัชกร/เจ้าหน้าที่ผู้จ่าย</label>
+          <label className="block text-sm font-bold text-slate-800 mb-1">เภสัชกร/เจ้าหน้าที่ผู้จ่าย</label>
           <input 
             type="text" 
             placeholder="พิมพ์หรือใช้ลูกศร ↑↓ เพื่อเลือกชื่อผู้บันทึก"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#007bff] focus:outline-none focus:ring-2 focus:ring-[#007bff] h-10"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#007bff] focus:outline-none focus:ring-2 focus:ring-[#007bff] h-11"
             value={formData.staff}
             onChange={handleSearchStaffChange}
             onKeyDown={handleStaffKeyDown}
@@ -598,13 +598,13 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
                   key={s.id}
                   onMouseDown={() => handleSelectStaff(s)}
                   onMouseEnter={() => setStaffHighlightIndex(idx)}
-                  className={`px-3 py-2 cursor-pointer text-xs border-b border-slate-50 ${
+                  className={`px-3 py-2 cursor-pointer text-sm border-b border-slate-50 ${
                     idx === staffHighlightIndex ? "bg-blue-50" : "hover:bg-blue-50"
                   }`}
                 >
                   <strong className="text-slate-800">{s.name}</strong>
                   {s.role && (
-                    <span className="text-[11px] text-slate-500 ml-2">({s.role})</span>
+                    <span className="text-[12px] text-slate-500 ml-2">({s.role})</span>
                   )}
                 </div>
               ))}
@@ -614,14 +614,14 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
 
         {/* แถวที่ 4: ค้นหายา (จาก v_dispensable_lots) */}
         <div className="relative">
-          <label className="block text-xs font-bold text-slate-800 mb-1">
+          <label className="block text-sm font-bold text-slate-800 mb-1">
             ค้นหารายการยา <span className="text-red-500 font-normal">*เรียงตามหมดอายุก่อน</span>
           </label>
           <input 
             type="text" 
             placeholder={departmentId ? "พิมพ์ชื่อยา หรือใช้ลูกศร ↑↓ เพื่อเลือก..." : "กรุณาเลือกหน่วยงานก่อน"}
             disabled={!departmentId}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#007bff] focus:outline-none focus:ring-2 focus:ring-[#007bff] h-10 disabled:bg-slate-50 disabled:cursor-not-allowed"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#007bff] focus:outline-none focus:ring-2 focus:ring-[#007bff] h-11 disabled:bg-slate-50 disabled:cursor-not-allowed"
             value={formData.searchDrug}
             onChange={handleSearchDrugChange}
             onKeyDown={handleDrugKeyDown}
@@ -629,10 +629,10 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
             onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
           />
           {drugFetchError && (
-            <p className="mt-1 text-[11px] text-amber-600">{drugFetchError}</p>
+            <p className="mt-1 text-[12px] text-amber-600">{drugFetchError}</p>
           )}
           {isLotDataIncomplete && (
-            <p className="mt-1 text-[11px] text-red-500 font-medium">
+            <p className="mt-1 text-[12px] text-red-500 font-medium">
               ⚠ ล็อตนี้ยังไม่มีเลข Lot / วันหมดอายุที่สมบูรณ์ในระบบ กรุณาไปแก้ไขข้อมูลที่หน้า "คลังยา" ก่อนจ่ายยาจริง
             </p>
           )}
@@ -644,7 +644,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
                   key={drug.lot_row_id}
                   onMouseDown={() => handleSelectDrug(drug)}
                   onMouseEnter={() => setDrugHighlightIndex(idx)}
-                  className={`px-3 py-2 cursor-pointer text-xs border-b border-slate-50 leading-relaxed ${
+                  className={`px-3 py-2 cursor-pointer text-sm border-b border-slate-50 leading-relaxed ${
                     idx === drugHighlightIndex ? "bg-blue-50" : "hover:bg-blue-50"
                   }`}
                 >
@@ -665,20 +665,20 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
         {/* แถวที่ 5: ความแรง, รูปแบบยา */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-bold text-slate-800 mb-1">ความแรง</label>
+            <label className="block text-sm font-bold text-slate-800 mb-1">ความแรง</label>
             <input 
               type="text" 
               readOnly
-              className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-500 cursor-not-allowed outline-none h-10"
+              className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-500 cursor-not-allowed outline-none h-11"
               value={formData.strength}
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-800 mb-1">รูปแบบยา</label>
+            <label className="block text-sm font-bold text-slate-800 mb-1">รูปแบบยา</label>
             <input 
               type="text" 
               readOnly
-              className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-500 cursor-not-allowed outline-none h-10"
+              className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-500 cursor-not-allowed outline-none h-11"
               value={formData.drugType}
             />
           </div>
@@ -687,11 +687,11 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
         {/* แถวที่ 6: Lot Number และ จำนวนที่จ่าย */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-bold text-slate-800 mb-1">Lot Number</label>
+            <label className="block text-sm font-bold text-slate-800 mb-1">Lot Number</label>
             <input 
               type="text" 
               readOnly
-              className={`w-full rounded-lg border px-3 py-2 text-sm cursor-not-allowed outline-none h-10 ${
+              className={`w-full rounded-lg border px-3 py-2 text-sm cursor-not-allowed outline-none h-11 ${
                 isLotDataIncomplete
                   ? "border-red-300 bg-red-50 text-red-500"
                   : "border-slate-200 bg-slate-50/50 text-slate-500"
@@ -700,7 +700,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-[#007bff] mb-1">
+            <label className="block text-sm font-bold text-[#007bff] mb-1">
               จำนวนที่จ่าย{formData.unit ? ` (${formData.unit})` : ""}
             </label>
             <input 
@@ -708,7 +708,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
               required
               min="1"
               max={formData.maxQuantity || undefined}
-              className="w-full rounded-lg border-2 border-[#007bff] px-3 py-2 text-base font-bold text-[#007bff] focus:outline-none h-10"
+              className="w-full rounded-lg border-2 border-[#007bff] px-3 py-2 text-base font-bold text-[#007bff] focus:outline-none h-11"
               value={formData.quantity}
               onChange={(e) => setFormData({...formData, quantity: e.target.value})}
             />
@@ -718,22 +718,22 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
         {/* แถวที่ 7: วันผลิต, วันหมดอายุ */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-bold text-slate-800 mb-1">วันผลิต</label>
+            <label className="block text-sm font-bold text-slate-800 mb-1">วันผลิต</label>
             <input 
               type="text" 
               placeholder="วว/ดด/ปปปป"
               readOnly
-              className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-400 cursor-not-allowed outline-none h-10"
+              className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-400 cursor-not-allowed outline-none h-11"
               value={formData.mfgDate}
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-800 mb-1">วันหมดอายุ</label>
+            <label className="block text-sm font-bold text-slate-800 mb-1">วันหมดอายุ</label>
             <input 
               type="text" 
               placeholder="วว/ดด/ปปปป"
               readOnly
-              className={`w-full rounded-lg border px-3 py-2 text-sm cursor-not-allowed outline-none h-10 ${
+              className={`w-full rounded-lg border px-3 py-2 text-sm cursor-not-allowed outline-none h-11 ${
                 isLotDataIncomplete
                   ? "border-red-300 bg-red-50 text-red-500"
                   : "border-slate-200 bg-slate-50/50 text-slate-400"

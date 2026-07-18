@@ -91,10 +91,10 @@ export default function DispensePage() {
                 <Calendar className="h-5 w-5" />
               </div>
               <div className="text-left">
-                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-none mb-1">
+                <span className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider leading-none mb-1">
                   วันที่และเวลาอัปเดตล่าสุด
                 </span>
-                <span className="block text-xs md:text-sm font-extrabold text-slate-700">
+                <span className="block text-sm md:text-sm font-extrabold text-slate-700">
                   {currentDateTime}
                 </span>
               </div>
@@ -159,7 +159,7 @@ export default function DispensePage() {
           </div>
 
           {/* บรรทัดล่าง: เครดิตผู้พัฒนา และสถานะฐานข้อมูล */}
-          <div className="flex items-center justify-center gap-3 text-xs text-slate-400 flex-wrap">
+          <div className="flex items-center justify-center gap-3 text-sm text-slate-400 flex-wrap">
             <span className="text-slate-500 font-semibold">© 2026 ระบบบันทึกจ่ายยา Antidote</span>
             <span className="h-3.5 w-px bg-slate-300">|</span>
             <span className="text-slate-500 font-semibold">พัฒนาโดย สายัญ ธุนันทา</span>
