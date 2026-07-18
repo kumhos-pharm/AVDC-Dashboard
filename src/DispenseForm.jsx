@@ -321,7 +321,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
 
   // URL ของ Google Apps Script (Web App) เดิมที่มีบอทไลน์ + Token/Group ID ตั้งค่าไว้อยู่แล้ว
   const GAS_NOTIFY_URL =
-    "https://script.google.com/macros/s/AKfycbyeSchVefRGqtLUtl-y0-daEKnmBziowBUynloUMIcqkk0zBviu7_JhuNolPaQ-AuESew/exec";
+    "https://script.google.com/macros/s/AKfycbz89_ykuKC-dXAYsXjgH9tOSq8Dpf35uZGKDCN_Ar_GDt3JJTaPKDIZ8B06HaHgpZXX6A/exec";
 
   // ส่งข้อความแจ้งเตือนเข้ากลุ่มไลน์ผ่าน Apps Script เดิม (ไม่บล็อกการบันทึก ถ้าส่งไม่สำเร็จแค่ log error ไว้เฉยๆ)
   // ใช้ mode: "no-cors" เพราะ Apps Script Web App ไม่ส่ง Access-Control-Allow-Origin กลับมา
