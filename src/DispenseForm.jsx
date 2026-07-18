@@ -319,6 +319,53 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
     if (onCancelEdit) onCancelEdit();
   };
 
+  // URL ของ Google Apps Script (Web App) เดิมที่มีบอทไลน์ + Token/Group ID ตั้งค่าไว้อยู่แล้ว
+  const GAS_NOTIFY_URL =
+    "https://script.google.com/macros/s/AKfycbyeSchVefRGqtLUtl-y0-daEKnmBziowBUynloUMIcqkk0zBviu7_JhuNolPaQ-AuESew/exec";
+
+  // ส่งข้อความแจ้งเตือนเข้ากลุ่มไลน์ผ่าน Apps Script เดิม (ไม่บล็อกการบันทึก ถ้าส่งไม่สำเร็จแค่ log error ไว้เฉยๆ)
+  // ใช้ Content-Type: text/plain เพื่อเลี่ยง CORS preflight ที่ Apps Script Web App ไม่รองรับ
+  const notifyLine = async (text) => {
+    try {
+      const res = await fetch(GAS_NOTIFY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ message: text }),
+      });
+      const result = await res.json().catch(() => null);
+      if (!res.ok || (result && result.status === "error")) {
+        console.error("แจ้งเตือนเข้า LINE ไม่สำเร็จ:", result || res.statusText);
+      }
+    } catch (err) {
+      console.error("แจ้งเตือนเข้า LINE ไม่สำเร็จ:", err.message);
+    }
+  };
+
+  // สร้างข้อความสรุปรายการจ่ายยา สำหรับส่งเข้ากลุ่มไลน์ (รูปแบบเดียวกับระบบเดิม)
+  const buildDispenseMessage = (qty, remainingStock) => {
+    const lines = [
+      "📢 บันทึกจ่ายยาใหม่! 💊",
+      "------------------------------",
+      `👤 ผู้ป่วย: ${formData.prefix}${formData.patientName || "-"}`,
+      `🆔 HN: ${formData.hn || "-"}`,
+      "------------------------------",
+      "รายการยา:",
+      `🔹 ${formData.searchDrug || "-"}${formData.strength ? ` (${formData.strength})` : ""}`,
+      `📦 รูปแบบ: ${formData.drugType || "-"}`,
+      `🔢 จำนวนจ่าย: ${qty} ${formData.unit || ""}`,
+    ];
+    if (remainingStock !== undefined && remainingStock !== null) {
+      lines.push(`📦 คงเหลือในคลัง: ${remainingStock} ${formData.unit || ""}`);
+    }
+    lines.push(
+      `🏷️ Lot: ${formData.lotNumber || "-"}`,
+      `📅 EXP: ${formData.expDate || "-"}`,
+      "------------------------------",
+      `👤 ผู้บันทึก: ${formData.staff || "-"}`
+    );
+    return lines.join("\n");
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -388,6 +435,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
       }
 
       Swal.fire({ ...swalBase, icon: "success", title: "แก้ไขรายการแล้ว", timer: 1500, showConfirmButton: false });
+      notifyLine(`✏️ แก้ไขรายการ\n${buildDispenseMessage(editQty)}`);
       resetForm();
       if (onCancelEdit) onCancelEdit();
       if (onSaved) onSaved();
@@ -453,6 +501,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
       if (updateError) throw updateError;
 
       Swal.fire({ ...swalBase, icon: "success", title: "บันทึกสำเร็จ", text: "บันทึกข้อมูลและตัดสต็อกเรียบร้อยแล้ว", timer: 1500, showConfirmButton: false });
+      notifyLine(buildDispenseMessage(dispenseQty, newQuantity));
 
       resetForm();
       fetchDrugs(departmentId);
