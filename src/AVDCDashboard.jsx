@@ -396,7 +396,7 @@ export default function AVDCDashboard() {
     >
       {/* รูปโลโก้ฝั่งซ้าย */}
       <img
-        src={avdcLogo1}
+        src={avdcLogo}
         alt="AVDC Logo"
         /* 🛠️ 2. ปรับขนาดโลโก้ให้ใหญ่ขึ้น (เดิม h-32 w-32 [128px] -> h-40 w-40 [160px]) */
         className="h-32 w-32 object-contain drop-shadow-md" 
