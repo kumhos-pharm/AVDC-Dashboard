@@ -12,20 +12,22 @@ export function useAvdcData() {
   const [totalDrugCount, setTotalDrugCount] = useState(0);
   const [totalQuantity, setTotalQuantity] = useState(0);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [expiringLots, setExpiringLots] = useState([]); // ยาที่ใกล้หมดอายุ (คงเหลือ > 0 และเหลืออายุ <= 90 วัน)
 
   const load = useCallback(async ({ silent = false } = {}) => {
     if (silent) setRefreshing(true);
     else setLoading(true);
     setError(null);
 
-    const [deptRes, gridRes, drugCountRes, lastUpdatedRes] = await Promise.all([
+    const [deptRes, gridRes, drugCountRes, lastUpdatedRes, lotsRes] = await Promise.all([
       supabase.from("departments").select("*").order("sort_order"),
       supabase.from("v_dashboard_grid").select("*"),
       supabase.from("drugs").select("*", { count: "exact", head: true }),
       supabase.from("v_last_updated").select("last_updated").single(),
+      supabase.from("v_warehouse_lots").select("drug_name, lot, exp_date, quantity, department_id"),
     ]);
 
-    const firstError = deptRes.error || gridRes.error || drugCountRes.error || lastUpdatedRes.error;
+    const firstError = deptRes.error || gridRes.error || drugCountRes.error || lastUpdatedRes.error || lotsRes.error;
     if (firstError) {
       setError(firstError);
       setLoading(false);
@@ -54,11 +56,31 @@ export function useAvdcData() {
     const pivoted = order.map((name) => ({ name, byDept: byDrugMap[name] }));
     const total = gridRows.reduce((sum, r) => sum + (r.quantity || 0), 0);
 
+    // ยาใกล้หมดอายุ: ใช้ตรรกะเดียวกับหน้าคลังยา (เหลืออายุ < 90 วัน) และต้องมีคงเหลือ > 0 เท่านั้น
+    const deptNameById = {};
+    deptRows.forEach((d) => {
+      deptNameById[d.id] = d.name;
+    });
+    const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const expiring = (lotsRes.data ?? [])
+      .filter((l) => (l.quantity ?? 0) > 0 && l.exp_date && new Date(l.exp_date).getTime() - now < NINETY_DAYS_MS)
+      .map((l) => ({
+        drugName: l.drug_name,
+        lot: l.lot,
+        expDate: l.exp_date,
+        quantity: l.quantity,
+        departmentName: deptNameById[l.department_id] || "-",
+        daysLeft: Math.ceil((new Date(l.exp_date).getTime() - now) / (24 * 60 * 60 * 1000)),
+      }))
+      .sort((a, b) => new Date(a.expDate) - new Date(b.expDate));
+
     setDepartments(deptRows);
     setDrugRows(pivoted);
     setTotalDrugCount(drugCountRes.count ?? pivoted.length);
     setTotalQuantity(total);
     setLastUpdated(lastUpdatedRes.data?.last_updated ?? null);
+    setExpiringLots(expiring);
     setLoading(false);
     setRefreshing(false);
   }, []);
@@ -67,9 +89,11 @@ export function useAvdcData() {
     load();
   }, [load]);
 
-  // อัปเดตค่าให้เป็นปัจจุบันอัตโนมัติ: ทุก 20 วิ + ทันทีที่กลับมาเปิดแท็บ/หน้าต่างนี้อีกครั้ง
+  // อัปเดตค่าให้เป็นปัจจุบันอัตโนมัติ: ทุก 5 นาที (เหมาะกับจอ TV/มอนิเตอร์ส่วนกลางที่เปิดค้างไว้)
+  // + รีเฟรชทันทีที่กลับมาเปิดแท็บ/หน้าต่างนี้อีกครั้ง (ครอบคลุมกรณีเปิดแท็บทิ้งไว้นาน ๆ แล้วกลับมาดู)
   useEffect(() => {
-    const interval = setInterval(() => load({ silent: true }), 20000);
+    const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+    const interval = setInterval(() => load({ silent: true }), REFRESH_INTERVAL_MS);
     function onVisible() {
       if (document.visibilityState === "visible") load({ silent: true });
     }
@@ -91,6 +115,7 @@ export function useAvdcData() {
     totalDrugCount,
     totalQuantity,
     lastUpdated,
+    expiringLots,
     reload: () => load({ silent: true }),
   };
 }

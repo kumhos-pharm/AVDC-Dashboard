@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Warehouse, Search, PackagePlus, Send, Loader2, Pencil, Trash2, X, AlertTriangle, SquarePen, Undo2 } from "lucide-react";
 import { useDrugsAndDepartments } from "./useDispense";
 import { useWarehouseLots, receiveStock, transferStock, removeStockLot, updateLotDetails, updateMinMax, useWarehouseMinMax, returnLotToWarehouse } from "./useWarehouse";
@@ -583,6 +584,19 @@ export default function WarehousePage() {
   // ต้องแปลงให้เป็นชนิดเดียวกันก่อนเทียบ ไม่เช่นนั้นจะไม่ตรงกันเลยและ dropdown จะใช้งานไม่ได้
   const viewDept = departments.find((d) => String(d.id) === String(viewDeptId)) || warehouseDept;
   const [search, setSearch] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // รองรับลิงก์ด่วนจากแดชบอร์ดหลัก: /admin/warehouse?q=<ชื่อยา>&dept=<id>
+  // เพื่อให้คลิกจากยอดที่ต่ำกว่า Min แล้วพามาที่นี่พร้อมค้นหา/เลือกหน่วยงานให้เลยทันที
+  useEffect(() => {
+    const q = searchParams.get("q");
+    const dept = searchParams.get("dept");
+    if (q) setSearch(q);
+    if (dept) setViewDeptId(dept);
+    if (q || dept) setSearchParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const { rows, loading, reload } = useWarehouseLots(viewDept?.id, search);
   const { map: minMax, reload: reloadMinMax } = useWarehouseMinMax(viewDept?.name);
   const [editingLot, setEditingLot] = useState(null);

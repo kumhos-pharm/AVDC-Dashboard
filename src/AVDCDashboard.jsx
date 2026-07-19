@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Search,
   Building2,
@@ -11,7 +12,6 @@ import {
   AlertTriangle,
   XCircle,
   MinusCircle,
-  QrCode,
   MessageCircle,
   ArrowDownCircle,
   ArrowUpCircle,
@@ -25,6 +25,8 @@ import {
   Database,
   X,
   ListChecks,
+  Clock,
+  ExternalLink,
 } from "lucide-react";
 import { useAvdcData } from "./useAvdcData";
 import avdcLogo from "./assets/avdc-logo.png";
@@ -192,9 +194,19 @@ function formatThaiDateTime(iso) {
 }
 
 export default function AVDCDashboard() {
-  const { loading, refreshing, error, departments, drugRows, totalDrugCount, totalQuantity, lastUpdated, reload } = useAvdcData();
+  const { loading, refreshing, error, departments, drugRows, totalDrugCount, totalQuantity, lastUpdated, expiringLots, reload } = useAvdcData();
+  const navigate = useNavigate();
   const [query, setQuery] = useState("");
-  const [activeModal, setActiveModal] = useState(null); // "drugs" | "depts" | "qty" | null
+  const [activeModal, setActiveModal] = useState(null); // "drugs" | "depts" | "qty" | "expiring" | null
+
+  // ไปหน้าคลังยา พร้อมค้นหาชื่อยา/หน่วยงานที่ต้องการให้ทันที (ใช้ตอนคลิกยอดที่ต่ำกว่า Min ในตาราง)
+  function goToWarehouse({ drugName, departmentId } = {}) {
+    const params = new URLSearchParams();
+    if (drugName) params.set("q", drugName);
+    if (departmentId != null) params.set("dept", String(departmentId));
+    const qs = params.toString();
+    navigate(`/admin/warehouse${qs ? `?${qs}` : ""}`);
+  }
 
   const homeDept = departments.find((d) => d.is_home);
   const warehouseDept = departments.find((d) => d.name === "คลังยา");
@@ -330,8 +342,8 @@ export default function AVDCDashboard() {
               </div>
             </div>
 
-            {/* การ์ดสรุปทั้ง 4 ใบ (Top Summary Cards) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* การ์ดสรุปทั้ง 5 ใบ (Top Summary Cards) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
               <SummaryCard 
                 customIcon={<MedicineBottleIcon />} 
                 label="รายการ Antidote / Vital Drug" 
@@ -358,6 +370,15 @@ export default function AVDCDashboard() {
                 borderColor="#e3dbfc"
                 bg="#f1eefc"
                 onClick={() => setActiveModal("qty")}
+              />
+              <SummaryCard 
+                customIcon={<ExpiringSoonIcon />} 
+                label="ยาใกล้หมดอายุ (90 วัน)" 
+                value={expiringLots.length} 
+                unit="ล็อต" 
+                borderColor="#fbd7d0"
+                bg="#fff1ee"
+                onClick={() => setActiveModal("expiring")}
               />
               <SummaryCard 
                 customIcon={<EmergencyShieldIcon />} 
@@ -531,14 +552,25 @@ export default function AVDCDashboard() {
                           const status = statusOf(cell);
                           const isHome = dep.id === homeDept?.id;
                           const st = STATUS[status];
-                          
+                          const needsAttention = status === "low" || status === "near" || status === "over";
+
                           return (
                             <td key={dep.id} className={`p-1.5 text-center ${isHome ? "bg-[#eaf7ef]/70" : ""}`}>
-                              <div className={`mx-auto flex h-7 w-[52px] items-center justify-center rounded-md font-extrabold ${
-                                cell && cell.quantity > 0 ? st.text : "text-slate-300"
-                              }`}>
-                                {cell && cell.quantity !== 0 ? cell.quantity : "-"}
-                              </div>
+                              {needsAttention ? (
+                                <button
+                                  onClick={() => goToWarehouse({ drugName: row.name, departmentId: dep.id })}
+                                  className={`mx-auto flex h-7 w-[52px] items-center justify-center rounded-md font-extrabold transition hover:ring-2 hover:ring-offset-1 ${st.text} ${st.bg}`}
+                                  title={`ไปหน้าคลังยา: ${row.name} (${dep.name})`}
+                                >
+                                  {cell && cell.quantity !== 0 ? cell.quantity : "-"}
+                                </button>
+                              ) : (
+                                <div className={`mx-auto flex h-7 w-[52px] items-center justify-center rounded-md font-extrabold ${
+                                  cell && cell.quantity > 0 ? st.text : "text-slate-300"
+                                }`}>
+                                  {cell && cell.quantity !== 0 ? cell.quantity : "-"}
+                                </div>
+                              )}
                             </td>
                           );
                         })}
@@ -589,17 +621,35 @@ export default function AVDCDashboard() {
                       {summaryRows.map((s) => {
                         const homeStatus = statusOf(s.home);
                         const whStatus = statusOf(s.warehouse);
+                        const homeNeedsAttention = homeStatus === "low" || homeStatus === "near" || homeStatus === "over";
+                        const whNeedsAttention = whStatus === "low" || whStatus === "near" || whStatus === "over";
                         return (
                           <tr key={s.name} className="border-t border-slate-100 hover:bg-slate-50/50">
                             <td className="p-2 font-bold text-slate-700">{s.name}</td>
                             <td className="p-1 text-center text-slate-500 font-semibold">{s.home?.min ?? "-"}</td>
                             <td className="p-1 text-center text-slate-500 font-semibold">{s.home?.max ?? "-"}</td>
                             <td className={`p-1 text-center font-extrabold ${STATUS[homeStatus].text}`}>{s.home && s.home.quantity !== 0 ? s.home.quantity : "-"}</td>
-                            <td className="p-1 text-center"><StatusBadge status={homeStatus} /></td>
+                            <td className="p-1 text-center">
+                              {homeNeedsAttention ? (
+                                <button onClick={() => goToWarehouse({ drugName: s.name, departmentId: homeDept?.id })} className="transition hover:opacity-75" title="ไปหน้าคลังยา">
+                                  <StatusBadge status={homeStatus} />
+                                </button>
+                              ) : (
+                                <StatusBadge status={homeStatus} />
+                              )}
+                            </td>
                             <td className="p-1 text-center text-slate-500 font-semibold">{s.warehouse?.min ?? "-"}</td>
                             <td className="p-1 text-center text-slate-500 font-semibold">{s.warehouse?.max ?? "-"}</td>
                             <td className={`p-1 text-center font-extrabold ${STATUS[whStatus].text}`}>{s.warehouse && s.warehouse.quantity !== 0 ? s.warehouse.quantity : "-"}</td>
-                            <td className="p-1 text-center"><StatusBadge status={whStatus} /></td>
+                            <td className="p-1 text-center">
+                              {whNeedsAttention ? (
+                                <button onClick={() => goToWarehouse({ drugName: s.name, departmentId: warehouseDept?.id })} className="transition hover:opacity-75" title="ไปหน้าคลังยา">
+                                  <StatusBadge status={whStatus} />
+                                </button>
+                              ) : (
+                                <StatusBadge status={whStatus} />
+                              )}
+                            </td>
                           </tr>
                         );
                       })}
@@ -613,24 +663,42 @@ export default function AVDCDashboard() {
                 <div>
                   <h3 className="mb-3 text-xs font-black text-red-700 tracking-wide uppercase">รายการที่ต้องติดตาม</h3>
                   <div className="space-y-2.5">
-                    <div className="flex items-center justify-between rounded-xl bg-white/90 px-3 py-2 text-xs border border-red-100">
+                    <button
+                      onClick={() => goToWarehouse()}
+                      className="flex w-full items-center justify-between rounded-xl bg-white/90 px-3 py-2 text-xs border border-red-100 transition hover:bg-white hover:shadow-sm"
+                      title="คลิกเพื่อไปหน้าคลังยา"
+                    >
                       <span className="flex items-center gap-1.5 font-bold text-[#dc2626]">
                         <ArrowDownCircle className="h-4 w-4" /> ต่ำกว่า Min
                       </span>
                       <span className="font-extrabold text-slate-700">{watchCounts.low} รายการ</span>
-                    </div>
-                    <div className="flex items-center justify-between rounded-xl bg-white/90 px-3 py-2 text-xs border border-amber-100">
+                    </button>
+                    <button
+                      onClick={() => goToWarehouse()}
+                      className="flex w-full items-center justify-between rounded-xl bg-white/90 px-3 py-2 text-xs border border-amber-100 transition hover:bg-white hover:shadow-sm"
+                      title="คลิกเพื่อไปหน้าคลังยา"
+                    >
                       <span className="flex items-center gap-1.5 font-bold text-amber-600">
                         <AlertTriangle className="h-4 w-4" /> ใกล้ต่ำกว่า Min
                       </span>
                       <span className="font-extrabold text-slate-700">{watchCounts.near} รายการ</span>
-                    </div>
+                    </button>
+                    <button
+                      onClick={() => goToWarehouse()}
+                      className="flex w-full items-center justify-between rounded-xl bg-white/90 px-3 py-2 text-xs border border-orange-100 transition hover:bg-white hover:shadow-sm"
+                      title="คลิกเพื่อไปหน้าคลังยา"
+                    >
+                      <span className="flex items-center gap-1.5 font-bold text-[#b3540c]">
+                        <ArrowUpCircle className="h-4 w-4" /> เกิน Max
+                      </span>
+                      <span className="font-extrabold text-slate-700">{watchCounts.over} รายการ</span>
+                    </button>
                   </div>
                 </div>
 
                 <div className="mt-4">
                   <div className="rounded-xl bg-red-600 py-2.5 text-center text-sm font-black text-white">
-                    รวม {watchCounts.low + watchCounts.near} รายการ
+                    รวม {watchCounts.low + watchCounts.near + watchCounts.over} รายการ
                   </div>
                 </div>
               </div>
@@ -697,15 +765,6 @@ export default function AVDCDashboard() {
                 <div className="flex items-center gap-2">
                   <Phone className="h-4 w-4 text-blue-200" />
                   <span className="font-semibold">โทร. 042-33440 , 042-334412-3 ต่อ xxxx</span>
-                </div>
-              </div>
-              <div className="mt-4 flex items-center gap-3 rounded-xl bg-white/10 p-3 border border-white/5">
-                <FakeQR />
-                <div>
-                  <p className="flex items-center gap-1 text-[11px] font-extrabold text-white">
-                    <QrCode className="h-4 w-4 text-blue-300" /> สแกน QR CODE
-                  </p>
-                  <p className="text-[10px] text-blue-200 mt-0.5 leading-snug font-medium">เพื่อประสานงานด่วน</p>
                 </div>
               </div>
             </div>
@@ -810,7 +869,57 @@ export default function AVDCDashboard() {
         </div>
       </DetailModal>
 
-      {/* ================= Footer ================= */}
+      {/* ================= Modal: ยาใกล้หมดอายุ ================= */}
+      <DetailModal
+        open={activeModal === "expiring"}
+        onClose={() => setActiveModal(null)}
+        title="ยาใกล้หมดอายุ (ภายใน 90 วัน)"
+        subtitle={`ทั้งหมด ${expiringLots.length} ล็อต`}
+        icon={<ExpiringSoonIcon className="h-8 w-8 shrink-0" />}
+      >
+        <div className="space-y-1.5">
+          {expiringLots.map((lot, idx) => {
+            const expired = lot.daysLeft < 0;
+            return (
+              <button
+                key={`${lot.drugName}-${lot.lot}-${idx}`}
+                onClick={() => {
+                  setActiveModal(null);
+                  goToWarehouse({ drugName: lot.drugName });
+                }}
+                className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-100 px-3 py-2 text-left text-xs hover:bg-slate-50"
+                title="คลิกเพื่อไปหน้าคลังยา"
+              >
+                <span className="flex min-w-0 items-center gap-2 font-semibold text-slate-700">
+                  <Syringe className="h-3.5 w-3.5 shrink-0 text-[#dc6b4f]" />
+                  <span className="min-w-0">
+                    <span className="block truncate">{lot.drugName} <span className="font-normal text-slate-400">(Lot {lot.lot})</span></span>
+                    <span className="block text-[10px] font-normal text-slate-400">{lot.departmentName} • คงเหลือ {lot.quantity.toLocaleString()}</span>
+                  </span>
+                </span>
+                <span className="flex shrink-0 flex-col items-end gap-0.5">
+                  <span className="text-slate-500">{formatThaiDateTime(lot.expDate).split("\n")[0]}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${expired ? "bg-red-100 text-red-600" : "bg-orange-50 text-[#dc6b4f]"}`}>
+                    {expired ? `หมดอายุแล้ว ${Math.abs(lot.daysLeft)} วัน` : `เหลือ ${lot.daysLeft} วัน`}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+          {expiringLots.length === 0 && <p className="py-6 text-center text-xs text-slate-400">ไม่มียาใกล้หมดอายุภายใน 90 วัน</p>}
+        </div>
+        {expiringLots.length > 0 && (
+          <button
+            onClick={() => {
+              setActiveModal(null);
+              goToWarehouse();
+            }}
+            className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#dc6b4f] py-2.5 text-xs font-bold text-white hover:bg-[#c65a3f]"
+          >
+            <ExternalLink className="h-3.5 w-3.5" /> ไปหน้าคลังยาเพื่อจัดการ
+          </button>
+        )}
+      </DetailModal>
       <footer className="w-full mt-8 py-6 border-t border-slate-200">
         <div className="mx-auto max-w-[1460px] px-4 flex flex-col items-center justify-center gap-3 text-center">
 
@@ -897,19 +1006,12 @@ function EmergencyShieldIcon({ className = "h-11 w-11 text-[#20509e]" }) {
   );
 }
 
-function FakeQR() {
-  const size = 9;
-  let s = 7;
-  const cells = [];
-  for (let i = 0; i < size * size; i++) {
-    s = (s * 9301 + 49297) % 233280;
-    cells.push(s / 233280 > 0.5);
-  }
+function ExpiringSoonIcon({ className = "h-11 w-11 text-[#dc6b4f]" }) {
   return (
-    <div className="grid h-14 w-14 grid-cols-9 gap-[1px] rounded bg-white p-1 shrink-0">
-      {cells.map((on, i) => (
-        <div key={i} className={on ? "bg-slate-900" : "bg-white"} />
-      ))}
-    </div>
+    <svg className={className} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="32" cy="34" r="22" fill="#fff1ee" stroke="#dc6b4f" strokeWidth="4" />
+      <path d="M32 22 V34 L40 40" stroke="#dc6b4f" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="26" y="4" width="12" height="6" rx="2" fill="#dc6b4f" />
+    </svg>
   );
 }
