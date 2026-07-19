@@ -16,7 +16,7 @@ export default function DrugsPage() {
 
   return (
     <div className="min-h-screen w-full bg-[#eef1f6] p-4 md:p-6 xl:p-8">
-      <div className="mx-auto max-w-5xl">
+      <div className="mx-auto max-w-[1680px]">
         <div className="mb-6 flex items-center gap-3">
           <span className="flex h-11 w-11 items-center justify-center rounded-2xl text-white" style={{ backgroundColor: NAVY }}>
             <ListChecks className="h-5.5 w-5.5" />

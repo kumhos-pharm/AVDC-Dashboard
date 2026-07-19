@@ -223,9 +223,10 @@ function ReceiveForm({ drugs, warehouseDeptId, onReceived, editTarget, minMaxByN
               resetForm();
               onCancelEdit?.();
             }}
-            className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-400 hover:bg-slate-100"
+            title="ยกเลิกการแก้ไข"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition hover:bg-red-50 hover:text-red-500"
           >
-            <X className="h-3.5 w-3.5" /> ยกเลิก
+            <X className="h-4 w-4" />
           </button>
         )}
       </div>
@@ -341,27 +342,30 @@ function ReceiveForm({ drugs, warehouseDeptId, onReceived, editTarget, minMaxByN
         </p>
       )}
 
-      <button
-        type="submit"
-        disabled={saving}
-        className={`mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r py-3 text-sm font-semibold text-white shadow-sm transition disabled:opacity-60 ${isEditing ? "from-amber-500 to-amber-600 shadow-amber-200 hover:from-amber-600 hover:to-amber-700" : "from-emerald-500 to-emerald-600 shadow-emerald-200 hover:from-emerald-600 hover:to-emerald-700"}`}
-      >
-        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : isEditing ? <SquarePen className="h-4 w-4" /> : <PackagePlus className="h-4 w-4" />}
-        {isEditing ? "บันทึกการแก้ไข" : "บันทึกรับยาเข้าคลัง"}
-      </button>
-
-      {isEditing && (
+      <div className="mt-5 flex items-stretch gap-2.5">
         <button
-          type="button"
-          onClick={() => {
-            resetForm();
-            onCancelEdit?.();
-          }}
-          className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-500 transition hover:bg-slate-50"
+          type="submit"
+          disabled={saving}
+          className={`flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r py-3 text-sm font-semibold text-white shadow-sm transition disabled:opacity-60 ${isEditing ? "from-amber-500 to-amber-600 shadow-amber-200 hover:from-amber-600 hover:to-amber-700" : "from-emerald-500 to-emerald-600 shadow-emerald-200 hover:from-emerald-600 hover:to-emerald-700"}`}
         >
-          <X className="h-4 w-4" /> ยกเลิกการแก้ไขยา
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : isEditing ? <SquarePen className="h-4 w-4" /> : <PackagePlus className="h-4 w-4" />}
+          {isEditing ? "บันทึกการแก้ไข" : "บันทึกรับยาเข้าคลัง"}
         </button>
-      )}
+
+        {isEditing && (
+          <button
+            type="button"
+            onClick={() => {
+              resetForm();
+              onCancelEdit?.();
+            }}
+            title="ยกเลิกการแก้ไข"
+            className="flex aspect-square items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-500"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        )}
+      </div>
     </form>
   );
 }
