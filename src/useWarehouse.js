@@ -52,9 +52,12 @@ export async function adjustStockQty({ drugId, departmentId, lot, mfgDate, expDa
 }
 
 // แก้ไขรายละเอียด lot แบบยกชุด (Lot No., จำนวน, วันผลิต, วันหมดอายุ)
-// ทำโดยหักยอดของ lot เดิม (ตามคีย์เดิม) ออกทั้งหมด แล้วบันทึกยอดใหม่ตามรายละเอียดที่แก้ไข
-// วิธีนี้ยังคง audit trail ไว้ใน ledger เดิม และรองรับกรณีเปลี่ยน Lot No./วันที่ ซึ่งจะทำให้กลุ่มยอดเปลี่ยนไปด้วย
+// อัปเดต "drug_lots" ตรงๆ ด้วย id ของแถวนั้น เพราะ v_warehouse_lots อ่านค่าจาก drug_lots โดยตรง
+// (ไม่ได้คำนวณ/รวมยอดจาก stock_movements) ถ้าไปแก้ผ่าน stock_movements อย่างเดียว
+// ตัวเลขจำนวนอาจถูกต้อง (ถ้ามี trigger คอยรวมยอดให้) แต่วันผลิต/วันหมดอายุจะไม่อัปเดตตาม
+// จึงต้อง update แถวใน drug_lots ตรงๆ ให้ชัวร์ แล้วค่อยบันทึกส่วนต่างลง stock_movements ไว้เป็น audit log
 export async function updateLotDetails({
+  lotId,
   drugId,
   departmentId,
   oldLot,
@@ -67,34 +70,37 @@ export async function updateLotDetails({
   newQty,
   staffName,
 }) {
-  const movements = [];
-  if (oldQty > 0) {
-    movements.push({
-      drug_id: drugId,
-      department_id: departmentId,
-      lot: oldLot,
-      mfg_date: oldMfgDate || null,
-      exp_date: oldExpDate || null,
-      change_qty: -oldQty,
-      reason: "adjust",
-      staff_name: staffName || null,
-    });
+  if (lotId != null) {
+    const { error: updateErr } = await supabase
+      .from("drug_lots")
+      .update({
+        lot: newLot,
+        quantity: newQty,
+        mfg_date: newMfgDate || null,
+        exp_date: newExpDate || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", lotId);
+    if (updateErr) return { error: updateErr };
   }
-  if (newQty > 0) {
-    movements.push({
+
+  // บันทึก audit log ของการแก้ไขไว้ใน stock_movements (ส่วนต่างของจำนวน) — ไม่กระทบยอดที่แสดงผล
+  // เพราะยอดที่แสดงผลอ่านจาก drug_lots ที่อัปเดตไปแล้วด้านบนโดยตรง
+  const diffQty = Number(newQty) - Number(oldQty || 0);
+  if (diffQty !== 0) {
+    await supabase.from("stock_movements").insert({
       drug_id: drugId,
       department_id: departmentId,
       lot: newLot,
       mfg_date: newMfgDate || null,
       exp_date: newExpDate || null,
-      change_qty: newQty,
+      change_qty: diffQty,
       reason: "adjust",
       staff_name: staffName || null,
     });
   }
-  if (movements.length === 0) return { error: null };
-  const { error } = await supabase.from("stock_movements").insert(movements);
-  return { error };
+
+  return { error: null };
 }
 
 // อัปเดตค่า Min / Max ของยาแต่ละตัว ในแต่ละหน่วยงาน (ตาราง drug_targets)

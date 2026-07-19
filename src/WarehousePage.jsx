@@ -129,6 +129,7 @@ function ReceiveForm({ drugs, warehouseDeptId, onReceived, editTarget, minMaxByN
 
       // 2) อัปเดต Lot / จำนวน / วันผลิต / วันหมดอายุ
       const { error: lotErr } = await updateLotDetails({
+        lotId: editTarget.id,
         drugId: editTarget.drug_id,
         departmentId: editTarget.department_id,
         oldLot: editTarget.lot,
@@ -359,10 +360,9 @@ function ReceiveForm({ drugs, warehouseDeptId, onReceived, editTarget, minMaxByN
               resetForm();
               onCancelEdit?.();
             }}
-            title="ยกเลิกการแก้ไข"
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-500"
+            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-500"
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" /> ยกเลิกการแก้ไข
           </button>
         </div>
       )}
