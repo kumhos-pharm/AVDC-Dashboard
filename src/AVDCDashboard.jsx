@@ -105,22 +105,22 @@ function SummaryCard({ customIcon, label, value, unit, borderColor, bg, isLast, 
     >
       <div className="shrink-0">{customIcon}</div>
       <div className="flex-1 min-w-0">
-        <span className="text-[10.5px] font-bold text-slate-500 leading-tight block mb-0.5 truncate">{label}</span>
+        <span className="text-xs font-bold text-slate-500 leading-tight block mb-0.5 truncate">{label}</span>
         {isLast ? (
-          <div className="flex flex-wrap items-baseline gap-x-1 gap-y-0">
-            <span className="text-xl md:text-2xl font-black text-slate-800 leading-none whitespace-nowrap">
+          <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0">
+            <span className="text-2xl md:text-3xl font-black text-slate-800 leading-none whitespace-nowrap">
               {value}
             </span>
             {unit && (
-              <span className="text-[10px] font-bold text-slate-400 leading-tight">
+              <span className="text-xs font-bold text-slate-400 leading-tight">
                 {unit}
               </span>
             )}
           </div>
         ) : (
-          <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-black text-slate-800 leading-none">{value}</span>
-            {unit && <span className="text-[10px] font-bold text-slate-400">{unit}</span>}
+          <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0">
+            <span className="text-2xl md:text-3xl font-black text-slate-800 leading-none whitespace-nowrap">{value}</span>
+            {unit && <span className="text-xs font-bold text-slate-400 leading-tight">{unit}</span>}
           </div>
         )}
       </div>
@@ -146,8 +146,8 @@ function DetailModal({ open, onClose, title, subtitle, icon, children }) {
           <div className="flex items-center gap-2.5 min-w-0">
             {icon}
             <div className="min-w-0">
-              <h3 className="text-sm font-bold text-slate-800 truncate">{title}</h3>
-              {subtitle && <p className="text-[11px] text-slate-400 truncate">{subtitle}</p>}
+              <h3 className="text-base font-bold text-slate-800 truncate">{title}</h3>
+              {subtitle && <p className="text-xs text-slate-400 truncate">{subtitle}</p>}
             </div>
           </div>
           <button
@@ -167,8 +167,8 @@ function StatusBadge({ status }) {
   const s = STATUS[status];
   const Icon = s.icon;
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${s.badgeBg} ${s.badgeText} font-['Kanit']`}>
-      <Icon className="h-3 w-3" /> {s.label}
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${s.badgeBg} ${s.badgeText} font-['Kanit']`}>
+      <Icon className="h-3.5 w-3.5" /> {s.label}
     </span>
   );
 }
@@ -315,25 +315,25 @@ export default function AVDCDashboard() {
                   <img src={avdcLogo} alt="AVDC Logo" className="h-20 w-20 md:h-24 md:w-24 object-contain" />
                 </div>
                 <div className="min-w-0">
-                  <h1 className="text-2xl md:text-3xl font-black tracking-tight" style={{ color: NAVY }}>
+                  <h1 className="text-3xl md:text-4xl font-black tracking-tight" style={{ color: NAVY }}>
                     AVDC DASHBOARD
                   </h1>
-                  <p className="text-base md:text-lg font-bold leading-normal truncate">
+                  <p className="text-lg md:text-xl font-bold leading-normal truncate">
                     <span className="text-[#16a34a]">Antidote</span> &amp; <span className="text-[#dc2626]">Vital Drug</span>{" "}
                     <span className="text-slate-700">Center</span>
                   </p>
-                  <p className="text-[10px] md:text-xs font-semibold text-slate-400 truncate">ศูนย์ Antidote และ Vital Drug โรงพยาบาลกุมภวาปี</p>
+                  <p className="text-xs md:text-sm font-semibold text-slate-400 truncate">ศูนย์ Antidote และ Vital Drug โรงพยาบาลกุมภวาปี</p>
                 </div>
               </div>
 
               {/* กล่องอัปเดตข้อมูล */}
-              <div className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/50 px-3 py-2 text-xs self-start sm:self-center">
+              <div className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/50 px-3 py-2 text-sm self-start sm:self-center">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#0d2a63]/5 text-[#0d2a63]">
                   <Calendar className="h-4 w-4" />
                 </div>
                 <div className="leading-tight">
-                  <div className="font-bold text-slate-400 text-[9px] mb-0.5">อัปเดตล่าสุด</div>
-                  <div className="font-extrabold text-slate-700 text-[11px] md:text-xs whitespace-pre-line">
+                  <div className="font-bold text-slate-400 text-[10.5px] mb-0.5">อัปเดตล่าสุด</div>
+                  <div className="font-extrabold text-slate-700 text-xs md:text-sm whitespace-pre-line">
                     {formatThaiDateTime(lastUpdated)}
                   </div>
                 </div>
@@ -403,8 +403,8 @@ export default function AVDCDashboard() {
             {/* ตารางหลัก: ยาในแต่ละหน่วยงาน */}
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm min-w-0">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                <h2 className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                  <MapPin className="h-4 w-4" style={{ color: NAVY }} />
+                <h2 className="flex items-center gap-2 text-base font-bold text-slate-700">
+                  <MapPin className="h-4 w-4 shrink-0" style={{ color: NAVY }} />
                   ยา Antidote &amp; Vital Drug ที่มีในหน่วยงาน (แสดงเฉพาะคงเหลือ)
                 </h2>
                 <div className="relative w-full sm:w-64">
@@ -413,13 +413,13 @@ export default function AVDCDashboard() {
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="ค้นหา Antidote / Vital Drug..."
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2 pl-10 pr-3.5 text-xs outline-none transition focus:border-blue-500 focus:bg-white"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2 pl-10 pr-3.5 text-sm outline-none transition focus:border-blue-500 focus:bg-white"
                   />
                 </div>
               </div>
 
               <div className="overflow-x-auto rounded-xl">
-                <table className="w-full min-w-[1080px] border-collapse text-xs">
+                <table className="w-full min-w-[1180px] border-collapse text-sm">
                   <thead>
                     <tr>
                       <th className="sticky left-0 z-10 bg-white p-2 text-left align-bottom font-bold text-slate-600 border-b border-slate-100">
@@ -430,12 +430,12 @@ export default function AVDCDashboard() {
                         return (
                           <th 
                             key={dep.id} 
-                            className={`p-2 text-center align-bottom font-bold border-b border-slate-100 min-w-[65px] ${
+                            className={`p-2 text-center align-bottom font-bold border-b border-slate-100 min-w-[72px] ${
                               isHome ? "bg-[#0d2a63] text-white rounded-t-lg" : "text-slate-600"
                             }`}
                           >
-                            <div className="text-[10px] truncate">{dep.name}</div>
-                            <div className={`text-[9px] font-semibold ${isHome ? "text-blue-100" : "text-slate-400"}`}>
+                            <div className="text-xs truncate">{dep.name}</div>
+                            <div className={`text-[10.5px] font-semibold ${isHome ? "text-blue-100" : "text-slate-400"}`}>
                               คงเหลือ
                             </div>
                           </th>
@@ -466,13 +466,13 @@ export default function AVDCDashboard() {
                               {needsAttention ? (
                                 <button
                                   onClick={() => goToWarehouse({ drugName: row.name, departmentId: dep.id })}
-                                  className={`mx-auto flex h-7 w-[52px] items-center justify-center rounded-md font-extrabold transition hover:ring-2 hover:ring-offset-1 ${st.text} ${st.bg}`}
+                                  className={`mx-auto flex h-8 w-[60px] items-center justify-center rounded-md font-extrabold transition hover:ring-2 hover:ring-offset-1 ${st.text} ${st.bg}`}
                                   title={`ไปหน้าคลังยา: ${row.name} (${dep.name})`}
                                 >
                                   {cell && cell.quantity !== 0 ? cell.quantity : "-"}
                                 </button>
                               ) : (
-                                <div className={`mx-auto flex h-7 w-[52px] items-center justify-center rounded-md font-extrabold ${
+                                <div className={`mx-auto flex h-8 w-[60px] items-center justify-center rounded-md font-extrabold ${
                                   cell && cell.quantity > 0 ? st.text : "text-slate-300"
                                 }`}>
                                   {cell && cell.quantity !== 0 ? cell.quantity : "-"}
@@ -488,7 +488,7 @@ export default function AVDCDashboard() {
               </div>
 
               {/* คำอธิบายด้านล่างตาราง */}
-              <div className="mt-3.5 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-slate-100 pt-3 text-[11px] text-slate-500">
+              <div className="mt-3.5 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-slate-100 pt-3 text-xs text-slate-500">
                 <span className="font-bold text-slate-400">หมายเหตุ: แสดงเฉพาะ "คงเหลือ" (หน่วย: ขวด/หลอด/ชุด)</span>
                 {Object.entries(STATUS).filter(([k]) => k !== "none").map(([key, s]) => (
                   <span key={key} className="flex items-center gap-1.5 font-semibold">
@@ -501,19 +501,19 @@ export default function AVDCDashboard() {
             {/* ตารางเปรียบเทียบ Min/Max */}
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_300px]">
               <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm min-w-0">
-                <h2 className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-700">
+                <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-slate-700">
                   <BarChart3 className="h-4 w-4 shrink-0" style={{ color: NAVY }} />
                   <span className="truncate">สถานะคงคลัง (ศูนย์ AVDC และ คลังยา)</span>
                 </h2>
                 <div className="overflow-x-auto rounded-xl">
-                  <table className="w-full min-w-[520px] border-collapse text-xs">
+                  <table className="w-full min-w-[560px] border-collapse text-sm">
                     <thead>
                       <tr>
                         <th rowSpan={2} className="border-b border-slate-200 p-2 text-left font-bold text-slate-600">Antidote / Vital Drug</th>
                         <th colSpan={4} className="border-b border-slate-200 bg-[#eef6ff] p-2 text-center font-bold text-[#1e589e]">ศูนย์ AVDC (Phar-OPD)</th>
                         <th colSpan={4} className="border-b border-slate-200 bg-[#eaf7ef] p-2 text-center font-bold text-[#1b723a]">คลังยา</th>
                       </tr>
-                      <tr className="text-[10px] text-slate-400">
+                      <tr className="text-xs text-slate-400">
                         <th className="p-1 text-center border-b border-slate-100">Min</th>
                         <th className="p-1 text-center border-b border-slate-100">Max</th>
                         <th className="p-1 text-center border-b border-slate-100">คงเหลือ</th>
@@ -568,11 +568,11 @@ export default function AVDCDashboard() {
               {/* การ์ดรายการติดตามด่วน */}
               <div className="rounded-2xl border border-red-100 bg-[#fff5f5] p-4 shadow-sm flex flex-col justify-between">
                 <div>
-                  <h3 className="mb-3 text-xs font-black text-red-700 tracking-wide uppercase">รายการที่ต้องติดตาม</h3>
+                  <h3 className="mb-3 text-sm font-black text-red-700 tracking-wide uppercase">รายการที่ต้องติดตาม</h3>
                   <div className="space-y-2.5">
                     <button
                       onClick={() => { setWatchStatus("low"); setActiveModal("watch"); }}
-                      className="flex w-full items-center justify-between rounded-xl bg-white/90 px-3 py-2 text-xs border border-red-100 transition hover:bg-white hover:shadow-sm"
+                      className="flex w-full items-center justify-between rounded-xl bg-white/90 px-3 py-2 text-sm border border-red-100 transition hover:bg-white hover:shadow-sm"
                       title="คลิกเพื่อดูรายการ"
                     >
                       <span className="flex items-center gap-1.5 font-bold text-[#dc2626]">
@@ -582,7 +582,7 @@ export default function AVDCDashboard() {
                     </button>
                     <button
                       onClick={() => { setWatchStatus("near"); setActiveModal("watch"); }}
-                      className="flex w-full items-center justify-between rounded-xl bg-white/90 px-3 py-2 text-xs border border-amber-100 transition hover:bg-white hover:shadow-sm"
+                      className="flex w-full items-center justify-between rounded-xl bg-white/90 px-3 py-2 text-sm border border-amber-100 transition hover:bg-white hover:shadow-sm"
                       title="คลิกเพื่อดูรายการ"
                     >
                       <span className="flex items-center gap-1.5 font-bold text-amber-600">
@@ -592,7 +592,7 @@ export default function AVDCDashboard() {
                     </button>
                     <button
                       onClick={() => { setWatchStatus("over"); setActiveModal("watch"); }}
-                      className="flex w-full items-center justify-between rounded-xl bg-white/90 px-3 py-2 text-xs border border-orange-100 transition hover:bg-white hover:shadow-sm"
+                      className="flex w-full items-center justify-between rounded-xl bg-white/90 px-3 py-2 text-sm border border-orange-100 transition hover:bg-white hover:shadow-sm"
                       title="คลิกเพื่อดูรายการ"
                     >
                       <span className="flex items-center gap-1.5 font-bold text-[#b3540c]">
@@ -604,7 +604,7 @@ export default function AVDCDashboard() {
                 </div>
 
                 <div className="mt-4">
-                  <div className="rounded-xl bg-red-600 py-2.5 text-center text-sm font-black text-white">
+                  <div className="rounded-xl bg-red-600 py-2.5 text-center text-base font-black text-white">
                     รวม {watchCounts.low + watchCounts.near + watchCounts.over} รายการ
                   </div>
                 </div>
@@ -617,8 +617,8 @@ export default function AVDCDashboard() {
           <aside className="flex flex-col gap-4">
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="mb-3 text-xs font-bold text-slate-600">คำแนะนำการแปลผล (คงเหลือ)</p>
-              <div className="space-y-2.5 text-xs">
+              <p className="mb-3 text-sm font-bold text-slate-600">คำแนะนำการแปลผล (คงเหลือ)</p>
+              <div className="space-y-2.5 text-sm">
                 {Object.entries(STATUS).map(([key, s]) => {
                   const Icon = s.icon;
                   let desc = "";
@@ -632,7 +632,7 @@ export default function AVDCDashboard() {
                       <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${s.badgeText}`} />
                       <div>
                         <span className={`font-bold ${s.badgeText}`}>{s.label}</span>
-                        <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">{desc}</p>
+                        <p className="text-xs text-slate-500 mt-0.5 leading-snug">{desc}</p>
                       </div>
                     </div>
                   );
@@ -641,12 +641,12 @@ export default function AVDCDashboard() {
             </div>
 
             <div className="rounded-2xl border border-blue-100 bg-[#eef6ff] p-4 shadow-sm">
-              <p className="mb-1 flex items-center gap-1.5 text-xs font-bold text-[#20509e]">
+              <p className="mb-1 flex items-center gap-1.5 text-sm font-bold text-[#20509e]">
                 <Lightbulb className="h-4.5 w-4.5" /> ไม่พบยาในหน่วยงานของท่าน?
               </p>
-              <p className="text-xs text-slate-600">โปรดติดต่อ ศูนย์ AVDC (Phar-OPD)</p>
-              <p className="text-sm font-bold text-slate-800 mt-1">โทร. 042-33440 , 042-334412-3 ต่อ xxxx</p>
-              <p className="text-sm font-bold text-slate-800 mt-1">มือถือ 000-0000000</p>
+              <p className="text-sm text-slate-600">โปรดติดต่อ ศูนย์ AVDC (Phar-OPD)</p>
+              <p className="text-base font-bold text-slate-800 mt-1">โทร. 042-33440 , 042-334412-3 ต่อ xxxx</p>
+              <p className="text-base font-bold text-slate-800 mt-1">มือถือ 000-0000000</p>
             </div>
 
           </aside>
@@ -676,7 +676,7 @@ export default function AVDCDashboard() {
           {drugTotals
             .filter((d) => !query.trim() || d.name.toLowerCase().includes(query.trim().toLowerCase()))
             .map((d) => (
-              <div key={d.name} className="flex items-center justify-between rounded-xl border border-slate-100 px-3 py-2 text-xs hover:bg-slate-50">
+              <div key={d.name} className="flex items-center justify-between rounded-xl border border-slate-100 px-3 py-2 text-sm hover:bg-slate-50">
                 <span className="flex items-center gap-2 font-semibold text-slate-700">
                   <Syringe className="h-3.5 w-3.5 text-[#20509e]" /> {d.name}
                 </span>
@@ -687,7 +687,7 @@ export default function AVDCDashboard() {
               </div>
             ))}
           {drugTotals.filter((d) => !query.trim() || d.name.toLowerCase().includes(query.trim().toLowerCase())).length === 0 && (
-            <p className="py-6 text-center text-xs text-slate-400">ไม่พบรายการยาที่ตรงกับคำค้นหา</p>
+            <p className="py-6 text-center text-sm text-slate-400">ไม่พบรายการยาที่ตรงกับคำค้นหา</p>
           )}
         </div>
       </DetailModal>
@@ -702,12 +702,12 @@ export default function AVDCDashboard() {
       >
         <div className="space-y-1.5">
           {deptTotals.map((dep) => (
-            <div key={dep.id} className="flex items-center justify-between rounded-xl border border-slate-100 px-3 py-2 text-xs hover:bg-slate-50">
+            <div key={dep.id} className="flex items-center justify-between rounded-xl border border-slate-100 px-3 py-2 text-sm hover:bg-slate-50">
               <span className="flex items-center gap-2 font-semibold text-slate-700 min-w-0">
                 <Building2 className="h-3.5 w-3.5 shrink-0 text-[#e2931a]" />
                 <span className="truncate">{dep.name}</span>
                 {dep.is_home && (
-                  <span className="shrink-0 rounded-full bg-[#eaf1fb] px-2 py-0.5 text-[9px] font-bold text-[#20509e]">ศูนย์ AVDC</span>
+                  <span className="shrink-0 rounded-full bg-[#eaf1fb] px-2.5 py-1 text-sm font-bold text-[#20509e]">ศูนย์ AVDC</span>
                 )}
               </span>
               <span className="flex items-center gap-2 shrink-0">
@@ -716,7 +716,7 @@ export default function AVDCDashboard() {
               </span>
             </div>
           ))}
-          {deptTotals.length === 0 && <p className="py-6 text-center text-xs text-slate-400">ไม่พบข้อมูลหน่วยงาน</p>}
+          {deptTotals.length === 0 && <p className="py-6 text-center text-sm text-slate-400">ไม่พบข้อมูลหน่วยงาน</p>}
         </div>
       </DetailModal>
 
@@ -732,7 +732,7 @@ export default function AVDCDashboard() {
           {deptTotals.map((dep) => {
             const pct = totalQuantity > 0 ? Math.round((dep.total / totalQuantity) * 100) : 0;
             return (
-              <div key={dep.id} className="rounded-xl border border-slate-100 px-3 py-2.5 text-xs">
+              <div key={dep.id} className="rounded-xl border border-slate-100 px-3 py-2.5 text-sm">
                 <div className="mb-1.5 flex items-center justify-between">
                   <span className="flex items-center gap-1.5 font-semibold text-slate-700 min-w-0 truncate">
                     <ListChecks className="h-3.5 w-3.5 shrink-0 text-[#5e3edc]" /> {dep.name}
@@ -745,7 +745,7 @@ export default function AVDCDashboard() {
               </div>
             );
           })}
-          {deptTotals.length === 0 && <p className="py-6 text-center text-xs text-slate-400">ไม่พบข้อมูลคงเหลือ</p>}
+          {deptTotals.length === 0 && <p className="py-6 text-center text-sm text-slate-400">ไม่พบข้อมูลคงเหลือ</p>}
         </div>
       </DetailModal>
 
@@ -767,26 +767,26 @@ export default function AVDCDashboard() {
                   setActiveModal(null);
                   goToWarehouse({ drugName: lot.drugName });
                 }}
-                className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-100 px-3 py-2 text-left text-xs hover:bg-slate-50"
+                className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-100 px-3 py-2 text-left text-sm hover:bg-slate-50"
                 title="คลิกเพื่อไปหน้าคลังยา"
               >
                 <span className="flex min-w-0 items-center gap-2 font-semibold text-slate-700">
                   <Syringe className="h-3.5 w-3.5 shrink-0 text-[#dc6b4f]" />
                   <span className="min-w-0">
                     <span className="block truncate">{lot.drugName} <span className="font-normal text-slate-400">(Lot {lot.lot})</span></span>
-                    <span className="block text-[10px] font-normal text-slate-400">{lot.departmentName} • คงเหลือ {lot.quantity.toLocaleString()}</span>
+                    <span className="block text-sm font-normal text-slate-400">{lot.departmentName} • คงเหลือ {lot.quantity.toLocaleString()}</span>
                   </span>
                 </span>
                 <span className="flex shrink-0 flex-col items-end gap-0.5">
                   <span className="text-slate-500">{formatThaiDateTime(lot.expDate).split("\n")[0]}</span>
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${expired ? "bg-red-100 text-red-600" : "bg-orange-50 text-[#dc6b4f]"}`}>
+                  <span className={`rounded-full px-2.5 py-1 text-sm font-bold ${expired ? "bg-red-100 text-red-600" : "bg-orange-50 text-[#dc6b4f]"}`}>
                     {expired ? `หมดอายุแล้ว ${Math.abs(lot.daysLeft)} วัน` : `เหลือ ${lot.daysLeft} วัน`}
                   </span>
                 </span>
               </button>
             );
           })}
-          {expiringLots.length === 0 && <p className="py-6 text-center text-xs text-slate-400">ไม่มียาใกล้หมดอายุภายใน 90 วัน</p>}
+          {expiringLots.length === 0 && <p className="py-6 text-center text-sm text-slate-400">ไม่มียาใกล้หมดอายุภายใน 90 วัน</p>}
         </div>
         {expiringLots.length > 0 && (
           <button
@@ -794,7 +794,7 @@ export default function AVDCDashboard() {
               setActiveModal(null);
               goToWarehouse();
             }}
-            className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#dc6b4f] py-2.5 text-xs font-bold text-white hover:bg-[#c65a3f]"
+            className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#dc6b4f] py-2.5 text-sm font-bold text-white hover:bg-[#c65a3f]"
           >
             <ExternalLink className="h-3.5 w-3.5" /> ไปหน้าคลังยาเพื่อจัดการ
           </button>
@@ -827,24 +827,24 @@ export default function AVDCDashboard() {
           {watchlist
             .filter((w) => w.status === watchStatus)
             .map((w, idx) => (
-              <div key={`${w.drugName}-${w.deptName}-${idx}`} className="rounded-xl border border-slate-100 px-3 py-2 text-xs">
+              <div key={`${w.drugName}-${w.deptName}-${idx}`} className="rounded-xl border border-slate-100 px-3 py-2 text-sm">
                 <div className="flex items-center justify-between gap-2">
                   <span className="flex min-w-0 items-center gap-2 font-semibold text-slate-700">
                     <Syringe className="h-3.5 w-3.5 shrink-0 text-[#20509e]" />
                     <span className="min-w-0">
                       <span className="block truncate">{w.drugName}</span>
-                      <span className="block text-[10px] font-normal text-slate-400">{w.deptName}</span>
+                      <span className="block text-sm font-normal text-slate-400">{w.deptName}</span>
                     </span>
                   </span>
                   <span className="flex shrink-0 flex-col items-end gap-0.5">
                     <span className="font-black text-slate-800">{w.quantity ?? "-"} หน่วย</span>
-                    <span className="text-[10px] text-slate-400">Min {w.min ?? "-"} / Max {w.max ?? "-"}</span>
+                    <span className="text-sm text-slate-400">Min {w.min ?? "-"} / Max {w.max ?? "-"}</span>
                   </span>
                 </div>
                 {w.lots.length > 0 && (
                   <div className="mt-2 space-y-1 border-t border-dashed border-slate-100 pt-2">
                     {w.lots.map((lot, li) => (
-                      <div key={`${lot.lot}-${li}`} className="flex items-center justify-between gap-2 text-[10.5px] text-slate-500">
+                      <div key={`${lot.lot}-${li}`} className="flex items-center justify-between gap-2 text-sm text-slate-500">
                         <span className="truncate">Lot {lot.lot || "-"}</span>
                         <span className="shrink-0 flex items-center gap-1.5">
                           <span>หมดอายุ {lot.expDate ? formatThaiDateTime(lot.expDate).split("\n")[0] : "-"}</span>
@@ -856,7 +856,7 @@ export default function AVDCDashboard() {
                 )}
               </div>
             ))}
-          {watchCounts[watchStatus] === 0 && <p className="py-6 text-center text-xs text-slate-400">ไม่มีรายการในกลุ่มนี้</p>}
+          {watchCounts[watchStatus] === 0 && <p className="py-6 text-center text-sm text-slate-400">ไม่มีรายการในกลุ่มนี้</p>}
         </div>
       </DetailModal>
 
@@ -874,14 +874,14 @@ export default function AVDCDashboard() {
           </div>
 
           {/* บรรทัดล่าง: เครดิตผู้พัฒนา และสถานะฐานข้อมูล */}
-          <div className="flex items-center justify-center gap-3 text-xs text-slate-400 flex-wrap">
+          <div className="flex items-center justify-center gap-3 text-sm text-slate-400 flex-wrap">
             <span>© 2026 ระบบบันทึกจ่ายยา Antidote</span>
             <span className="h-3.5 w-px bg-slate-300"></span>
             <span className="text-slate-500 font-semibold">พัฒนาโดย สายัญ ธุนันทา</span>
             <span className="h-3.5 w-px bg-slate-300"></span>
 
             {/* Supabase Badge */}
-            <div className="flex items-center gap-1 rounded-full bg-emerald-50/50 border border-emerald-100/85 px-2.5 py-0.5 font-bold text-[#10b981] text-[10px]">
+            <div className="flex items-center gap-1 rounded-full bg-emerald-50/50 border border-emerald-100/85 px-2.5 py-1 font-bold text-[#10b981] text-sm">
               <Database className="h-2.5 w-2.5" />
               <span>Supabase Connected</span>
             </div>
