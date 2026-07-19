@@ -230,8 +230,8 @@ function ReceiveForm({ drugs, warehouseDeptId, onReceived, editTarget, minMaxByN
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="relative col-span-2">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <div className="relative col-span-2 md:col-span-4">
           <label className="mb-1.5 block text-xs font-semibold text-slate-500">ชื่อยา</label>
           <div className="relative">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -349,6 +349,19 @@ function ReceiveForm({ drugs, warehouseDeptId, onReceived, editTarget, minMaxByN
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : isEditing ? <SquarePen className="h-4 w-4" /> : <PackagePlus className="h-4 w-4" />}
         {isEditing ? "บันทึกการแก้ไข" : "บันทึกรับยาเข้าคลัง"}
       </button>
+
+      {isEditing && (
+        <button
+          type="button"
+          onClick={() => {
+            resetForm();
+            onCancelEdit?.();
+          }}
+          className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-500 transition hover:bg-slate-50"
+        >
+          <X className="h-4 w-4" /> ยกเลิกการแก้ไขยา
+        </button>
+      )}
     </form>
   );
 }
@@ -583,8 +596,8 @@ export default function WarehousePage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[400px_1fr]">
-          <div className="xl:sticky xl:top-6 xl:self-start">
+        <div className="flex flex-col gap-6">
+          <div className="w-full">
             <ReceiveForm
               drugs={drugs}
               warehouseDeptId={warehouseDept?.id}
