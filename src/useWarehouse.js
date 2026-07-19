@@ -52,10 +52,13 @@ export async function adjustStockQty({ drugId, departmentId, lot, mfgDate, expDa
 }
 
 // แก้ไขรายละเอียด lot แบบยกชุด (Lot No., จำนวน, วันผลิต, วันหมดอายุ)
-// อัปเดต "drug_lots" ตรงๆ ด้วย id ของแถวนั้น เพราะ v_warehouse_lots อ่านค่าจาก drug_lots โดยตรง
-// (ไม่ได้คำนวณ/รวมยอดจาก stock_movements) ถ้าไปแก้ผ่าน stock_movements อย่างเดียว
-// ตัวเลขจำนวนอาจถูกต้อง (ถ้ามี trigger คอยรวมยอดให้) แต่วันผลิต/วันหมดอายุจะไม่อัปเดตตาม
-// จึงต้อง update แถวใน drug_lots ตรงๆ ให้ชัวร์ แล้วค่อยบันทึกส่วนต่างลง stock_movements ไว้เป็น audit log
+// สำคัญ: quantity ของ drug_lots ถูกทำให้ตรงกันอัตโนมัติโดย trigger ที่ทำงานทุกครั้งที่มีการ insert
+// ลง stock_movements (รูปแบบเดียวกับ receiveStock / removeStockLot / transferStock ด้านบนที่ไม่แตะ
+// drug_lots.quantity ตรงๆ เลย) ก่อนหน้านี้ฟังก์ชันนี้ทั้ง (1) เซตค่า quantity ใน drug_lots ตรงๆ
+// และ (2) insert ส่วนต่างลง stock_movements ด้วย — ทำให้ trigger บวกส่วนต่างซ้ำเข้าไปอีกรอบบนค่าที่ถูกต้องอยู่แล้ว
+// ยอดคงเหลือจึงเพี้ยน (บวกเกิน/ติดลบ) ทุกครั้งที่แก้ไข จึงแก้โดยให้ตรงนี้อัปเดตเฉพาะ Lot No./วันผลิต/วันหมดอายุ
+// ตรงๆ ใน drug_lots (ฟิลด์ที่ stock_movements ไม่ได้ track) ส่วนจำนวนคงเหลือให้ผ่าน stock_movements
+// (ส่วนต่าง diffQty) เพียงทางเดียวเท่านั้น เหมือนฟังก์ชันอื่น ๆ ทั้งหมดในไฟล์นี้
 export async function updateLotDetails({
   lotId,
   drugId,
@@ -75,7 +78,6 @@ export async function updateLotDetails({
       .from("drug_lots")
       .update({
         lot: newLot,
-        quantity: newQty,
         mfg_date: newMfgDate || null,
         exp_date: newExpDate || null,
         updated_at: new Date().toISOString(),
@@ -84,11 +86,10 @@ export async function updateLotDetails({
     if (updateErr) return { error: updateErr };
   }
 
-  // บันทึก audit log ของการแก้ไขไว้ใน stock_movements (ส่วนต่างของจำนวน) — ไม่กระทบยอดที่แสดงผล
-  // เพราะยอดที่แสดงผลอ่านจาก drug_lots ที่อัปเดตไปแล้วด้านบนโดยตรง
+  // ส่วนต่างของจำนวน — เป็นทางเดียวที่ใช้ปรับยอดคงเหลือจริง (ผ่าน trigger ของ stock_movements)
   const diffQty = Number(newQty) - Number(oldQty || 0);
   if (diffQty !== 0) {
-    await supabase.from("stock_movements").insert({
+    const { error: moveErr } = await supabase.from("stock_movements").insert({
       drug_id: drugId,
       department_id: departmentId,
       lot: newLot,
@@ -98,6 +99,7 @@ export async function updateLotDetails({
       reason: "adjust",
       staff_name: staffName || null,
     });
+    if (moveErr) return { error: moveErr };
   }
 
   return { error: null };
