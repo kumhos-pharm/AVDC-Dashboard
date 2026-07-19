@@ -197,7 +197,8 @@ export default function AVDCDashboard() {
   const { loading, refreshing, error, departments, drugRows, totalDrugCount, totalQuantity, lastUpdated, expiringLots, reload } = useAvdcData();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
-  const [activeModal, setActiveModal] = useState(null); // "drugs" | "depts" | "qty" | "expiring" | null
+  const [activeModal, setActiveModal] = useState(null); // "drugs" | "depts" | "qty" | "expiring" | "watch" | null
+  const [watchStatus, setWatchStatus] = useState(null); // "low" | "near" | "over" — ใช้ตอนเปิด popup รายการที่ต้องติดตาม
 
   // ไปหน้าคลังยา พร้อมค้นหาชื่อยา/หน่วยงานที่ต้องการให้ทันที (ใช้ตอนคลิกยอดที่ต่ำกว่า Min ในตาราง)
   function goToWarehouse({ drugName, departmentId } = {}) {
@@ -260,7 +261,14 @@ export default function AVDCDashboard() {
       Object.entries(d.byDept).forEach(([deptName, cell]) => {
         const status = statusOf(cell);
         if (status !== "ok" && status !== "none") {
-          items.push({ name: `${d.name} (${deptName})`, status });
+          items.push({
+            drugName: d.name,
+            deptName,
+            status,
+            quantity: cell?.quantity ?? null,
+            min: cell?.min ?? null,
+            max: cell?.max ?? null,
+          });
         }
       });
     });
@@ -342,8 +350,8 @@ export default function AVDCDashboard() {
               </div>
             </div>
 
-            {/* การ์ดสรุปทั้ง 5 ใบ (Top Summary Cards) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+            {/* การ์ดสรุปทั้ง 4 ใบ (Top Summary Cards) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <SummaryCard 
                 customIcon={<MedicineBottleIcon />} 
                 label="รายการ Antidote / Vital Drug" 
@@ -378,16 +386,8 @@ export default function AVDCDashboard() {
                 unit="ล็อต" 
                 borderColor="#fbd7d0"
                 bg="#fff1ee"
-                onClick={() => setActiveModal("expiring")}
-              />
-              <SummaryCard 
-                customIcon={<EmergencyShieldIcon />} 
-                label="ศูนย์สำรองและกระจายยา" 
-                value="24 ชั่วโมง" 
-                unit="พร้อมช่วยเหลือผู้ป่วย" 
-                borderColor="#cbdcf7"
-                bg="#eaf1fb"
                 isLast={true}
+                onClick={() => setActiveModal("expiring")}
               />
             </div>
 
@@ -509,6 +509,15 @@ export default function AVDCDashboard() {
                   <MapPin className="h-4 w-4" style={{ color: NAVY }} />
                   ยา Antidote &amp; Vital Drug ที่มีในหน่วยงาน (แสดงเฉพาะคงเหลือ)
                 </h2>
+                <div className="relative w-full sm:w-64">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="ค้นหา Antidote / Vital Drug..."
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2 pl-10 pr-3.5 text-xs outline-none transition focus:border-blue-500 focus:bg-white"
+                  />
+                </div>
               </div>
 
               <div className="overflow-x-auto rounded-xl">
@@ -664,9 +673,9 @@ export default function AVDCDashboard() {
                   <h3 className="mb-3 text-xs font-black text-red-700 tracking-wide uppercase">รายการที่ต้องติดตาม</h3>
                   <div className="space-y-2.5">
                     <button
-                      onClick={() => goToWarehouse()}
+                      onClick={() => { setWatchStatus("low"); setActiveModal("watch"); }}
                       className="flex w-full items-center justify-between rounded-xl bg-white/90 px-3 py-2 text-xs border border-red-100 transition hover:bg-white hover:shadow-sm"
-                      title="คลิกเพื่อไปหน้าคลังยา"
+                      title="คลิกเพื่อดูรายการ"
                     >
                       <span className="flex items-center gap-1.5 font-bold text-[#dc2626]">
                         <ArrowDownCircle className="h-4 w-4" /> ต่ำกว่า Min
@@ -674,9 +683,9 @@ export default function AVDCDashboard() {
                       <span className="font-extrabold text-slate-700">{watchCounts.low} รายการ</span>
                     </button>
                     <button
-                      onClick={() => goToWarehouse()}
+                      onClick={() => { setWatchStatus("near"); setActiveModal("watch"); }}
                       className="flex w-full items-center justify-between rounded-xl bg-white/90 px-3 py-2 text-xs border border-amber-100 transition hover:bg-white hover:shadow-sm"
-                      title="คลิกเพื่อไปหน้าคลังยา"
+                      title="คลิกเพื่อดูรายการ"
                     >
                       <span className="flex items-center gap-1.5 font-bold text-amber-600">
                         <AlertTriangle className="h-4 w-4" /> ใกล้ต่ำกว่า Min
@@ -684,9 +693,9 @@ export default function AVDCDashboard() {
                       <span className="font-extrabold text-slate-700">{watchCounts.near} รายการ</span>
                     </button>
                     <button
-                      onClick={() => goToWarehouse()}
+                      onClick={() => { setWatchStatus("over"); setActiveModal("watch"); }}
                       className="flex w-full items-center justify-between rounded-xl bg-white/90 px-3 py-2 text-xs border border-orange-100 transition hover:bg-white hover:shadow-sm"
-                      title="คลิกเพื่อไปหน้าคลังยา"
+                      title="คลิกเพื่อดูรายการ"
                     >
                       <span className="flex items-center gap-1.5 font-bold text-[#b3540c]">
                         <ArrowUpCircle className="h-4 w-4" /> เกิน Max
@@ -707,29 +716,7 @@ export default function AVDCDashboard() {
           </main>
 
           {/* ฝั่งขวาด้านล่าง: เมนูปีกนกช่วยเหลือ */}
-          <aside className="space-y-4">
-            
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="mb-2 text-xs font-bold text-slate-600">ค้นหา Antidote / Vital Drug</p>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="พิมพ์ชื่อยา..."
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2 pl-10 pr-3.5 text-sm outline-none transition focus:border-blue-500 focus:bg-white"
-                />
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-blue-100 bg-[#eef6ff] p-4 shadow-sm">
-              <p className="mb-1 flex items-center gap-1.5 text-xs font-bold text-[#20509e]">
-                <Lightbulb className="h-4.5 w-4.5" /> ไม่พบยาในหน่วยงานของท่าน?
-              </p>
-              <p className="text-xs text-slate-600">โปรดติดต่อ ศูนย์ AVDC (Phar-OPD)</p>
-              <p className="text-sm font-bold text-slate-800 mt-1">โทร. 042-33440 , 042-334412-3 ต่อ xxxx</p>
-              <p className="text-sm font-bold text-slate-800 mt-1">มือถือ 000-0000000</p>
-            </div>
+          <aside className="flex flex-col gap-4">
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className="mb-3 text-xs font-bold text-slate-600">คำแนะนำการแปลผล (คงเหลือ)</p>
@@ -755,7 +742,17 @@ export default function AVDCDashboard() {
               </div>
             </div>
 
-            <div className="rounded-2xl p-4 text-white shadow-sm" style={{ backgroundColor: NAVY }}>
+            <div className="rounded-2xl border border-blue-100 bg-[#eef6ff] p-4 shadow-sm">
+              <p className="mb-1 flex items-center gap-1.5 text-xs font-bold text-[#20509e]">
+                <Lightbulb className="h-4.5 w-4.5" /> ไม่พบยาในหน่วยงานของท่าน?
+              </p>
+              <p className="text-xs text-slate-600">โปรดติดต่อ ศูนย์ AVDC (Phar-OPD)</p>
+              <p className="text-sm font-bold text-slate-800 mt-1">โทร. 042-33440 , 042-334412-3 ต่อ xxxx</p>
+              <p className="text-sm font-bold text-slate-800 mt-1">มือถือ 000-0000000</p>
+            </div>
+
+            {/* กล่องติดต่อศูนย์ AVDC — ดันลงไปชิดขอบล่างของคอลัมน์ขวา แทนที่จะเหลือพื้นที่ว่างด้านล่าง */}
+            <div className="mt-auto rounded-2xl p-4 text-white shadow-sm" style={{ backgroundColor: NAVY }}>
               <p className="mb-3 text-xs font-black uppercase text-blue-100">ติดต่อศูนย์ AVDC</p>
               <div className="space-y-2 text-xs">
                 <div className="flex items-center gap-2">
@@ -920,6 +917,51 @@ export default function AVDCDashboard() {
           </button>
         )}
       </DetailModal>
+
+      {/* ================= Modal: รายการที่ต้องติดตาม (ต่ำกว่า Min / ใกล้ต่ำกว่า Min / เกิน Max) ================= */}
+      <DetailModal
+        open={activeModal === "watch"}
+        onClose={() => setActiveModal(null)}
+        title={
+          watchStatus === "low"
+            ? "รายการต่ำกว่า Min"
+            : watchStatus === "near"
+            ? "รายการใกล้ต่ำกว่า Min"
+            : "รายการเกิน Max"
+        }
+        subtitle={`ทั้งหมด ${watchCounts[watchStatus] ?? 0} รายการ`}
+        icon={
+          watchStatus === "over" ? (
+            <ArrowUpCircle className="h-8 w-8 shrink-0 text-[#b3540c]" />
+          ) : watchStatus === "near" ? (
+            <AlertTriangle className="h-8 w-8 shrink-0 text-amber-500" />
+          ) : (
+            <ArrowDownCircle className="h-8 w-8 shrink-0 text-[#dc2626]" />
+          )
+        }
+      >
+        <div className="space-y-1.5">
+          {watchlist
+            .filter((w) => w.status === watchStatus)
+            .map((w, idx) => (
+              <div key={`${w.drugName}-${w.deptName}-${idx}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-100 px-3 py-2 text-xs">
+                <span className="flex min-w-0 items-center gap-2 font-semibold text-slate-700">
+                  <Syringe className="h-3.5 w-3.5 shrink-0 text-[#20509e]" />
+                  <span className="min-w-0">
+                    <span className="block truncate">{w.drugName}</span>
+                    <span className="block text-[10px] font-normal text-slate-400">{w.deptName}</span>
+                  </span>
+                </span>
+                <span className="flex shrink-0 flex-col items-end gap-0.5">
+                  <span className="font-black text-slate-800">{w.quantity ?? "-"} หน่วย</span>
+                  <span className="text-[10px] text-slate-400">Min {w.min ?? "-"} / Max {w.max ?? "-"}</span>
+                </span>
+              </div>
+            ))}
+          {watchCounts[watchStatus] === 0 && <p className="py-6 text-center text-xs text-slate-400">ไม่มีรายการในกลุ่มนี้</p>}
+        </div>
+      </DetailModal>
+
       <footer className="w-full mt-8 py-6 border-t border-slate-200">
         <div className="mx-auto max-w-[1460px] px-4 flex flex-col items-center justify-center gap-3 text-center">
 
@@ -992,16 +1034,6 @@ function MedicineBoxIcon({ className = "h-11 w-11 text-[#7c5cf0]" }) {
       <path d="M8 18 L32 30 L56 18" stroke="#5e3edc" strokeWidth="4" strokeLinejoin="round" />
       <path d="M32 30 V58" stroke="#5e3edc" strokeWidth="4" />
       <rect x="24" y="34" width="16" height="12" rx="2" fill="#5e3edc" transform="skewY(-10)" />
-    </svg>
-  );
-}
-
-function EmergencyShieldIcon({ className = "h-11 w-11 text-[#20509e]" }) {
-  return (
-    <svg className={className} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M32 6 C32 6 52 10 52 26 C52 42 32 56 32 56 C32 56 12 42 12 26 C12 10 32 6 32 6 Z" fill="#eaf1fb" stroke="#20509e" strokeWidth="4" strokeLinejoin="round" />
-      <circle cx="32" cy="31" r="10" fill="#20509e" />
-      <path d="M32 25 V37 M26 31 H38" stroke="white" strokeWidth="4.5" strokeLinecap="round" />
     </svg>
   );
 }
