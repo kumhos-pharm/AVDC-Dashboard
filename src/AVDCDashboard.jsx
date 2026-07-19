@@ -6,13 +6,11 @@ import {
   Boxes,
   MapPin,
   BarChart3,
-  Phone,
   Lightbulb,
   CheckCircle2,
   AlertTriangle,
   XCircle,
   MinusCircle,
-  MessageCircle,
   ArrowDownCircle,
   ArrowUpCircle,
   Syringe,
@@ -20,7 +18,6 @@ import {
   Loader2,
   AlertOctagon,
   Calendar,
-  Check,
   Pill,
   Database,
   X,
@@ -30,7 +27,6 @@ import {
 } from "lucide-react";
 import { useAvdcData } from "./useAvdcData";
 import avdcLogo from "./assets/avdc-logo.png";
-import avdcLogo1 from "./assets/avdc-logo1.png";
 
 const NAVY = "#0d2a63";
 const NAVY_DEEP = "#0a1f4d";
@@ -194,7 +190,7 @@ function formatThaiDateTime(iso) {
 }
 
 export default function AVDCDashboard() {
-  const { loading, refreshing, error, departments, drugRows, totalDrugCount, totalQuantity, lastUpdated, expiringLots, reload } = useAvdcData();
+  const { loading, refreshing, error, departments, drugRows, totalDrugCount, totalQuantity, lastUpdated, expiringLots, lotsByDrugDept, reload } = useAvdcData();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [activeModal, setActiveModal] = useState(null); // "drugs" | "depts" | "qty" | "expiring" | "watch" | null
@@ -268,12 +264,13 @@ export default function AVDCDashboard() {
             quantity: cell?.quantity ?? null,
             min: cell?.min ?? null,
             max: cell?.max ?? null,
+            lots: lotsByDrugDept[`${d.name}||${deptName}`] || [],
           });
         }
       });
     });
     return items;
-  }, [drugRows]);
+  }, [drugRows, lotsByDrugDept]);
 
   const watchCounts = {
     low: watchlist.filter((w) => w.status === "low").length,
@@ -306,9 +303,9 @@ export default function AVDCDashboard() {
         {/* ========================================================================= */}
         {/* 1. ส่วนบนสุด (Header Area) รองรับ Responsive Grid */}
         {/* ========================================================================= */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_310px] mb-4">
+        <div className="mb-4">
           
-          {/* ฝั่งซ้าย: ส่วนหัว และ การ์ดข้อมูล 4 ใบ */}
+          {/* ส่วนหัว และ การ์ดข้อมูล 4 ใบ */}
           <div className="rounded-2xl bg-white p-4 md:p-5 border border-slate-100 shadow-sm flex flex-col justify-between gap-4 min-w-0">
             
             {/* โลโก้, ชื่อศูนย์ และ แถบอัปเดตล่าสุด */}
@@ -393,106 +390,7 @@ export default function AVDCDashboard() {
 
           </div>
 
-{/* ==================== Right Banner ==================== */}
-<div
-  className="relative overflow-hidden rounded-[28px] shadow-xl text-white"
-  style={{
-    background: `linear-gradient(135deg, ${NAVY} 0%, #1E56B5 55%, ${NAVY_DEEP} 100%)`,
-  }}
->
-  {/* เอฟเฟกต์แสง Glow ตกแต่งพื้นหลัง */}
-  <div className="absolute -top-16 -right-16 h-48 w-48 rounded-full bg-cyan-400/10 blur-3xl"></div>
-  <div className="absolute -bottom-20 -left-20 h-48 w-48 rounded-full bg-blue-300/10 blur-3xl"></div>
-
-  <div className="relative p-4">
-
-    {/* ================= ส่วนหัว โลโก้และข้อความ (Header Area) ================= */}
-    <div
-      className="grid items-center"
-      style={{
-        /* 🛠️ 1. ขยายพื้นที่คอลัมน์ฝั่งซ้ายรองรับโลโก้ใหญ่ขึ้น (เดิม 130px -> 150px) */
-        gridTemplateColumns: "115px 1fr", 
-        columnGap: "2px",
-      }}
-    >
-      {/* รูปโลโก้ฝั่งซ้าย */}
-      <img
-        src={avdcLogo1}
-        alt="AVDC Logo"
-        /* 🛠️ 2. ปรับขนาดโลโก้ให้ใหญ่ขึ้น (เดิม h-32 w-32 [128px] -> h-40 w-40 [160px]) */
-        className="h-32 w-32 object-contain drop-shadow-md" 
-      />
-
-      {/* กลุ่มตัวหนังสือฝั่งขวา */}
-      {/* 🛠️ 3. ขยับข้อความเข้าใกล้โลโก้มากขึ้นตามขนาดโลโก้ใหม่ สามารถเปลี่ยนเป็น -30px ถึง -40px ได้ตามชอบครับ */}
-      <div style={{ marginLeft: "-18px" }}> 
-        
-        {/* บรรทัดที่ 1 */}
-        <div className="text-[12px] font-medium text-blue-100 text-center tracking-wide">
-          ศูนย์ Antidote และ Vital Drug
         </div>
-
-        {/* บรรทัดที่ 2 */}
-        <div className="mt-0.5 text-center text-[17px] font-semibold tracking-wide">
-          โรงพยาบาลกุมภวาปี
-        </div>
-
-        {/* บรรทัดที่ 3: ตัวหนาใหญ่ AVDC */}
-        <div
-          className="mt-1 text-center font-black"
-          style={{
-            fontSize: "52px",
-            lineHeight: 1,
-            letterSpacing: "-2px",
-            textShadow: "0 4px 10px rgba(0,0,0,0.25)",
-          }}
-        >
-          AVDC
-        </div>
-
-        {/* เส้นแถบสีรุ้งใต้คำว่า AVDC */}
-        <div className="mt-2 flex justify-center">
-          <div
-            style={{
-              width: "175px",
-              height: "5px",
-              borderRadius: "999px",
-              background: "linear-gradient(90deg, #22c55e, #f59e0b, #ef4444, #38bdf8)",
-            }}
-          />
-        </div>
-
-        {/* บรรทัดที่ 4: ข้อความภาษาอังกฤษ */}
-        <div className="mt-2.5 text-center text-[12.5px] font-medium text-blue-100 tracking-wide">
-          Antidote &amp; Vital Drug Center
-        </div>
-      </div>
-    </div>
-
-    {/* ================= กล่องข้อความรายละเอียดด้านล่าง (Information Box) ================= */}
-    <div className="mt-5 rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
-      {/* รายละเอียดข้อที่ 1 */}
-      <div className="flex items-start gap-3">
-        <Check className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400" />
-        <div className="text-[13.5px] leading-6 font-normal">
-          ศูนย์สำรองและกระจายยา Antidote  <br /> และ Vital Drug
-          ของ โรงพยาบาลกุมภวาปี
-        </div>
-      </div>
-
-      {/* รายละเอียดข้อที่ 2 */}
-      <div className="mt-3 flex items-center gap-3">
-        <Check className="h-5 w-5 shrink-0 text-emerald-400" />
-        <div className="text-[13.5px] font-normal">
-          ให้บริการตลอด 24 ชั่วโมง
-        </div>
-      </div>
-    </div>
-
-  </div>
-</div>
-
-</div>
 
         {/* ========================================================================= */}
         {/* 2. ส่วนข้อมูลอื่นๆ ตาราง และไซด์บาร์ */}
@@ -601,14 +499,14 @@ export default function AVDCDashboard() {
             </div>
 
             {/* ตารางเปรียบเทียบ Min/Max */}
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_290px]">
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_300px]">
               <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm min-w-0">
                 <h2 className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-700">
-                  <BarChart3 className="h-4 w-4" style={{ color: NAVY }} />
-                  สถานะคงคลัง (ศูนย์ AVDC และ คลังยา)
+                  <BarChart3 className="h-4 w-4 shrink-0" style={{ color: NAVY }} />
+                  <span className="truncate">สถานะคงคลัง (ศูนย์ AVDC และ คลังยา)</span>
                 </h2>
                 <div className="overflow-x-auto rounded-xl">
-                  <table className="w-full min-w-[550px] border-collapse text-xs">
+                  <table className="w-full min-w-[520px] border-collapse text-xs">
                     <thead>
                       <tr>
                         <th rowSpan={2} className="border-b border-slate-200 p-2 text-left font-bold text-slate-600">Antidote / Vital Drug</th>
@@ -749,21 +647,6 @@ export default function AVDCDashboard() {
               <p className="text-xs text-slate-600">โปรดติดต่อ ศูนย์ AVDC (Phar-OPD)</p>
               <p className="text-sm font-bold text-slate-800 mt-1">โทร. 042-33440 , 042-334412-3 ต่อ xxxx</p>
               <p className="text-sm font-bold text-slate-800 mt-1">มือถือ 000-0000000</p>
-            </div>
-
-            {/* กล่องติดต่อศูนย์ AVDC — ดันลงไปชิดขอบล่างของคอลัมน์ขวา แทนที่จะเหลือพื้นที่ว่างด้านล่าง */}
-            <div className="mt-auto rounded-2xl p-4 text-white shadow-sm" style={{ backgroundColor: NAVY }}>
-              <p className="mb-3 text-xs font-black uppercase text-blue-100">ติดต่อศูนย์ AVDC</p>
-              <div className="space-y-2 text-xs">
-                <div className="flex items-center gap-2">
-                  <MessageCircle className="h-4 w-4 text-emerald-400" />
-                  <span className="font-semibold">@AVDC_Kumphawapi</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Phone className="h-4 w-4 text-blue-200" />
-                  <span className="font-semibold">โทร. 042-33440 , 042-334412-3 ต่อ xxxx</span>
-                </div>
-              </div>
             </div>
 
           </aside>
@@ -944,18 +827,33 @@ export default function AVDCDashboard() {
           {watchlist
             .filter((w) => w.status === watchStatus)
             .map((w, idx) => (
-              <div key={`${w.drugName}-${w.deptName}-${idx}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-100 px-3 py-2 text-xs">
-                <span className="flex min-w-0 items-center gap-2 font-semibold text-slate-700">
-                  <Syringe className="h-3.5 w-3.5 shrink-0 text-[#20509e]" />
-                  <span className="min-w-0">
-                    <span className="block truncate">{w.drugName}</span>
-                    <span className="block text-[10px] font-normal text-slate-400">{w.deptName}</span>
+              <div key={`${w.drugName}-${w.deptName}-${idx}`} className="rounded-xl border border-slate-100 px-3 py-2 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="flex min-w-0 items-center gap-2 font-semibold text-slate-700">
+                    <Syringe className="h-3.5 w-3.5 shrink-0 text-[#20509e]" />
+                    <span className="min-w-0">
+                      <span className="block truncate">{w.drugName}</span>
+                      <span className="block text-[10px] font-normal text-slate-400">{w.deptName}</span>
+                    </span>
                   </span>
-                </span>
-                <span className="flex shrink-0 flex-col items-end gap-0.5">
-                  <span className="font-black text-slate-800">{w.quantity ?? "-"} หน่วย</span>
-                  <span className="text-[10px] text-slate-400">Min {w.min ?? "-"} / Max {w.max ?? "-"}</span>
-                </span>
+                  <span className="flex shrink-0 flex-col items-end gap-0.5">
+                    <span className="font-black text-slate-800">{w.quantity ?? "-"} หน่วย</span>
+                    <span className="text-[10px] text-slate-400">Min {w.min ?? "-"} / Max {w.max ?? "-"}</span>
+                  </span>
+                </div>
+                {w.lots.length > 0 && (
+                  <div className="mt-2 space-y-1 border-t border-dashed border-slate-100 pt-2">
+                    {w.lots.map((lot, li) => (
+                      <div key={`${lot.lot}-${li}`} className="flex items-center justify-between gap-2 text-[10.5px] text-slate-500">
+                        <span className="truncate">Lot {lot.lot || "-"}</span>
+                        <span className="shrink-0 flex items-center gap-1.5">
+                          <span>หมดอายุ {lot.expDate ? formatThaiDateTime(lot.expDate).split("\n")[0] : "-"}</span>
+                          <span className="font-semibold text-slate-600">{lot.quantity?.toLocaleString?.() ?? lot.quantity} หน่วย</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           {watchCounts[watchStatus] === 0 && <p className="py-6 text-center text-xs text-slate-400">ไม่มีรายการในกลุ่มนี้</p>}

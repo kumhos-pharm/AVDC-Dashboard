@@ -21,7 +21,7 @@ function AdminShell({ children }) {
   return (
     <div className="min-h-screen w-full bg-[#eef1f6]">
       <Sidebar />
-      <div className="min-w-0 lg:pl-24">{children}</div>
+      <div className="min-w-0 pb-20 lg:pb-0 lg:pl-24">{children}</div>
     </div>
   );
 }

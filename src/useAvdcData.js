@@ -13,6 +13,7 @@ export function useAvdcData() {
   const [totalQuantity, setTotalQuantity] = useState(0);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [expiringLots, setExpiringLots] = useState([]); // ยาที่ใกล้หมดอายุ (คงเหลือ > 0 และเหลืออายุ <= 90 วัน)
+  const [lotsByDrugDept, setLotsByDrugDept] = useState({}); // { "ชื่อยา||หน่วยงาน": [{lot, expDate, quantity}] } เรียงตามวันหมดอายุ ใช้แสดงใน popup รายการที่ต้องติดตาม
 
   const load = useCallback(async ({ silent = false } = {}) => {
     if (silent) setRefreshing(true);
@@ -75,12 +76,26 @@ export function useAvdcData() {
       }))
       .sort((a, b) => new Date(a.expDate) - new Date(b.expDate));
 
+    // จัดกลุ่ม Lot ตามคู่ "ชื่อยา||หน่วยงาน" (เฉพาะที่ยังมีคงเหลือ) เรียงตามวันหมดอายุใกล้สุดก่อน — ใช้แสดงใน popup รายการที่ต้องติดตาม
+    const lotsMap = {};
+    (lotsRes.data ?? [])
+      .filter((l) => (l.quantity ?? 0) > 0)
+      .forEach((l) => {
+        const key = `${l.drug_name}||${deptNameById[l.department_id] || "-"}`;
+        if (!lotsMap[key]) lotsMap[key] = [];
+        lotsMap[key].push({ lot: l.lot, expDate: l.exp_date, quantity: l.quantity });
+      });
+    Object.values(lotsMap).forEach((arr) =>
+      arr.sort((a, b) => new Date(a.expDate || 0) - new Date(b.expDate || 0))
+    );
+
     setDepartments(deptRows);
     setDrugRows(pivoted);
     setTotalDrugCount(drugCountRes.count ?? pivoted.length);
     setTotalQuantity(total);
     setLastUpdated(lastUpdatedRes.data?.last_updated ?? null);
     setExpiringLots(expiring);
+    setLotsByDrugDept(lotsMap);
     setLoading(false);
     setRefreshing(false);
   }, []);
@@ -116,6 +131,7 @@ export function useAvdcData() {
     totalQuantity,
     lastUpdated,
     expiringLots,
+    lotsByDrugDept,
     reload: () => load({ silent: true }),
   };
 }
