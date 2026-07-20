@@ -301,7 +301,16 @@ export default function AVDCDashboard() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-[#eef1f6] font-['Kanit'] text-slate-800 antialiased">
+    <div className="min-h-screen w-full bg-[#eef1f6] font-['Kanit'] text-slate-800 avdc-crisp-text">
+      <style>{`
+        .avdc-crisp-text, .avdc-crisp-text * {
+          -webkit-font-smoothing: subpixel-antialiased;
+          -moz-osx-font-smoothing: auto;
+          text-rendering: optimizeLegibility;
+          font-feature-settings: "kern" 1;
+          font-kerning: normal;
+        }
+      `}</style>
       <div className="mx-auto max-w-[1460px] p-4 md:p-5">
         
         {/* ========================================================================= */}
