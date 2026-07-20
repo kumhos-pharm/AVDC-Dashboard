@@ -540,7 +540,11 @@ export default function AVDCDashboard() {
                             <td className={`p-1 text-center font-extrabold ${STATUS[homeStatus].text}`}>{s.home && s.home.quantity !== 0 ? s.home.quantity : "-"}</td>
                             <td className="p-1 text-center">
                               {homeNeedsAttention ? (
-                                <button onClick={() => goToWarehouse({ drugName: s.name, departmentId: homeDept?.id })} className="transition hover:opacity-75" title="ไปหน้าคลังยา">
+                                <button
+                                  onClick={() => setCellDetail({ drugName: s.name, deptName: homeDept?.name, deptId: homeDept?.id, cell: s.home })}
+                                  className="transition hover:opacity-75"
+                                  title={`ดูรายละเอียด: ${s.name} (${homeDept?.name})`}
+                                >
                                   <StatusBadge status={homeStatus} />
                                 </button>
                               ) : (
@@ -552,7 +556,11 @@ export default function AVDCDashboard() {
                             <td className={`p-1 text-center font-extrabold ${STATUS[whStatus].text}`}>{s.warehouse && s.warehouse.quantity !== 0 ? s.warehouse.quantity : "-"}</td>
                             <td className="p-1 text-center">
                               {whNeedsAttention ? (
-                                <button onClick={() => goToWarehouse({ drugName: s.name, departmentId: warehouseDept?.id })} className="transition hover:opacity-75" title="ไปหน้าคลังยา">
+                                <button
+                                  onClick={() => setCellDetail({ drugName: s.name, deptName: warehouseDept?.name, deptId: warehouseDept?.id, cell: s.warehouse })}
+                                  className="transition hover:opacity-75"
+                                  title={`ดูรายละเอียด: ${s.name} (${warehouseDept?.name})`}
+                                >
                                   <StatusBadge status={whStatus} />
                                 </button>
                               ) : (
@@ -880,6 +888,9 @@ export default function AVDCDashboard() {
                 <span className="text-lg font-black text-slate-800">{cell?.quantity ?? 0} หน่วย</span>
               </div>
               <div className="space-y-1.5">
+                {lots.length > 1 && (
+                  <p className="px-1 text-sm font-semibold text-slate-400">ทั้งหมด {lots.length} lot (เรียงตามวันหมดอายุใกล้สุดก่อน)</p>
+                )}
                 {lots.map((lot, idx) => {
                   const expired = lot.expDate && new Date(lot.expDate).getTime() < Date.now();
                   return (
