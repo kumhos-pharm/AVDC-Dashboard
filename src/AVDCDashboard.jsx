@@ -198,6 +198,7 @@ export default function AVDCDashboard() {
   const [query, setQuery] = useState("");
   const [activeModal, setActiveModal] = useState(null); // "drugs" | "depts" | "qty" | "expiring" | "watch" | null
   const [watchStatus, setWatchStatus] = useState(null); // "low" | "near" | "over" — ใช้ตอนเปิด popup รายการที่ต้องติดตาม
+  const [cellDetail, setCellDetail] = useState(null); // { drugName, deptName, deptId, cell } — ใช้ตอนคลิกยอดคงเหลือในตารางหลัก (แสดง popup แทนการเปลี่ยนหน้าไปคลังยา)
 
   // ไปหน้าคลังยา พร้อมค้นหาชื่อยา/หน่วยงานที่ต้องการให้ทันที (ใช้ตอนคลิกยอดที่ต่ำกว่า Min ในตาราง)
   function goToWarehouse({ drugName, departmentId } = {}) {
@@ -462,23 +463,21 @@ export default function AVDCDashboard() {
                           const status = statusOf(cell);
                           const isHome = dep.id === homeDept?.id;
                           const st = STATUS[status];
-                          const needsAttention = status === "low" || status === "near" || status === "over";
+                          const hasStock = cell && cell.quantity > 0;
 
                           return (
                             <td key={dep.id} className={`p-1.5 text-center ${isHome ? "bg-[#eaf7ef]/70" : ""}`}>
-                              {needsAttention ? (
+                              {hasStock ? (
                                 <button
-                                  onClick={() => goToWarehouse({ drugName: row.name, departmentId: dep.id })}
+                                  onClick={() => setCellDetail({ drugName: row.name, deptName: dep.name, deptId: dep.id, cell })}
                                   className={`mx-auto flex h-8 w-[60px] items-center justify-center rounded-md font-extrabold transition hover:ring-2 hover:ring-offset-1 ${st.text} ${st.bg}`}
-                                  title={`ไปหน้าคลังยา: ${row.name} (${dep.name})`}
+                                  title={`ดูรายละเอียด: ${row.name} (${dep.name})`}
                                 >
-                                  {cell && cell.quantity !== 0 ? cell.quantity : "-"}
+                                  {cell.quantity}
                                 </button>
                               ) : (
-                                <div className={`mx-auto flex h-8 w-[60px] items-center justify-center rounded-md font-extrabold ${
-                                  cell && cell.quantity > 0 ? st.text : "text-slate-300"
-                                }`}>
-                                  {cell && cell.quantity !== 0 ? cell.quantity : "-"}
+                                <div className="mx-auto flex h-8 w-[60px] items-center justify-center rounded-md font-extrabold text-slate-300">
+                                  -
                                 </div>
                               )}
                             </td>
@@ -861,6 +860,54 @@ export default function AVDCDashboard() {
             ))}
           {watchCounts[watchStatus] === 0 && <p className="py-6 text-center text-sm text-slate-400">ไม่มีรายการในกลุ่มนี้</p>}
         </div>
+      </DetailModal>
+
+      {/* ================= Modal: รายละเอียดยอดคงเหลือ (คลิกจากตารางหลัก แทนการเปลี่ยนหน้าไปคลังยา) ================= */}
+      <DetailModal
+        open={!!cellDetail}
+        onClose={() => setCellDetail(null)}
+        title={cellDetail?.drugName}
+        subtitle={cellDetail?.deptName}
+        icon={<Syringe className="h-8 w-8 shrink-0 text-[#20509e]" />}
+      >
+        {cellDetail && (() => {
+          const { cell, drugName, deptName, deptId } = cellDetail;
+          const lots = lotsByDrugDept[`${drugName}||${deptName}`] || [];
+          return (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5">
+                <span className="text-sm font-semibold text-slate-500">Min {cell?.min ?? "-"} / Max {cell?.max ?? "-"}</span>
+                <span className="text-lg font-black text-slate-800">{cell?.quantity ?? 0} หน่วย</span>
+              </div>
+              <div className="space-y-1.5">
+                {lots.map((lot, idx) => {
+                  const expired = lot.expDate && new Date(lot.expDate).getTime() < Date.now();
+                  return (
+                    <div key={`${lot.lot}-${idx}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-100 px-3 py-2 text-sm">
+                      <span className="truncate font-semibold text-slate-700">Lot {lot.lot || "-"}</span>
+                      <span className="flex shrink-0 items-center gap-2">
+                        <span className="text-slate-400">หมดอายุ {lot.expDate ? formatThaiDateTime(lot.expDate).split("\n")[0] : "-"}</span>
+                        <span className={`rounded-full px-2.5 py-1 text-sm font-bold ${expired ? "bg-red-100 text-red-600" : "bg-slate-100 text-slate-600"}`}>
+                          {lot.quantity?.toLocaleString?.() ?? lot.quantity} หน่วย
+                        </span>
+                      </span>
+                    </div>
+                  );
+                })}
+                {lots.length === 0 && <p className="py-4 text-center text-sm text-slate-400">ไม่มีข้อมูล lot แยกย่อยสำหรับรายการนี้</p>}
+              </div>
+              <button
+                onClick={() => {
+                  setCellDetail(null);
+                  goToWarehouse({ drugName, departmentId: deptId });
+                }}
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-50"
+              >
+                <ExternalLink className="h-3.5 w-3.5" /> ไปหน้าคลังยาเพื่อจัดการ
+              </button>
+            </div>
+          );
+        })()}
       </DetailModal>
 
       <footer className="w-full mt-8 py-6 border-t border-slate-200">
