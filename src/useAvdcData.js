@@ -12,7 +12,7 @@ export function useAvdcData() {
   const [totalDrugCount, setTotalDrugCount] = useState(0);
   const [totalQuantity, setTotalQuantity] = useState(0);
   const [lastUpdated, setLastUpdated] = useState(null);
-  const [expiringLots, setExpiringLots] = useState([]); // ยาที่ใกล้หมดอายุ (คงเหลือ > 0 และเหลืออายุ <= 90 วัน)
+  const [expiringLots, setExpiringLots] = useState([]); // ยาที่ใกล้หมดอายุเท่านั้น (คงเหลือ > 0 และเหลืออายุ 0-90 วัน ไม่รวมที่หมดอายุไปแล้ว)
   const [lotsByDrugDept, setLotsByDrugDept] = useState({}); // { "ชื่อยา||หน่วยงาน": [{lot, expDate, quantity}] } เรียงตามวันหมดอายุ ใช้แสดงใน popup รายการที่ต้องติดตาม
 
   const load = useCallback(async ({ silent = false } = {}) => {
@@ -57,7 +57,7 @@ export function useAvdcData() {
     const pivoted = order.map((name) => ({ name, byDept: byDrugMap[name] }));
     const total = gridRows.reduce((sum, r) => sum + (r.quantity || 0), 0);
 
-    // ยาใกล้หมดอายุ: ใช้ตรรกะเดียวกับหน้าคลังยา (เหลืออายุ < 90 วัน) และต้องมีคงเหลือ > 0 เท่านั้น
+    // ยาใกล้หมดอายุ: เหลืออายุระหว่าง 0-90 วันเท่านั้น (ไม่รวมที่หมดอายุไปแล้ว) และต้องมีคงเหลือ > 0
     const deptNameById = {};
     deptRows.forEach((d) => {
       deptNameById[d.id] = d.name;
@@ -65,7 +65,11 @@ export function useAvdcData() {
     const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
     const now = Date.now();
     const expiring = (lotsRes.data ?? [])
-      .filter((l) => (l.quantity ?? 0) > 0 && l.exp_date && new Date(l.exp_date).getTime() - now < NINETY_DAYS_MS)
+      .filter((l) => {
+        if ((l.quantity ?? 0) <= 0 || !l.exp_date) return false;
+        const msLeft = new Date(l.exp_date).getTime() - now;
+        return msLeft >= 0 && msLeft < NINETY_DAYS_MS;
+      })
       .map((l) => ({
         drugName: l.drug_name,
         lot: l.lot,

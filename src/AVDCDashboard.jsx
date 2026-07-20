@@ -769,16 +769,18 @@ export default function AVDCDashboard() {
       >
         <div className="space-y-1.5">
           {expiringLots.map((lot, idx) => {
-            const expired = lot.daysLeft < 0;
             return (
               <button
                 key={`${lot.drugName}-${lot.lot}-${idx}`}
                 onClick={() => {
+                  const drugRow = drugRows.find((d) => d.name === lot.drugName);
+                  const cell = drugRow?.byDept[lot.departmentName];
+                  const dept = departments.find((dep) => dep.name === lot.departmentName);
                   setActiveModal(null);
-                  goToWarehouse({ drugName: lot.drugName });
+                  setCellDetail({ drugName: lot.drugName, deptName: lot.departmentName, deptId: dept?.id, cell });
                 }}
                 className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-100 px-3 py-2 text-left text-sm hover:bg-slate-50"
-                title="คลิกเพื่อไปหน้าคลังยา"
+                title="คลิกเพื่อดูรายละเอียด"
               >
                 <span className="flex min-w-0 items-center gap-2 font-semibold text-slate-700">
                   <Syringe className="h-3.5 w-3.5 shrink-0 text-[#dc6b4f]" />
@@ -789,8 +791,8 @@ export default function AVDCDashboard() {
                 </span>
                 <span className="flex shrink-0 flex-col items-end gap-0.5">
                   <span className="text-slate-500">{formatThaiDateTime(lot.expDate).split("\n")[0]}</span>
-                  <span className={`rounded-full px-2.5 py-1 text-sm font-bold ${expired ? "bg-red-100 text-red-600" : "bg-orange-50 text-[#dc6b4f]"}`}>
-                    {expired ? `หมดอายุแล้ว ${Math.abs(lot.daysLeft)} วัน` : `เหลือ ${lot.daysLeft} วัน`}
+                  <span className="rounded-full bg-orange-50 px-2.5 py-1 text-sm font-bold text-[#dc6b4f]">
+                    เหลือ {lot.daysLeft} วัน
                   </span>
                 </span>
               </button>
