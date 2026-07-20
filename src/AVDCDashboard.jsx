@@ -42,7 +42,10 @@ const STATUS = {
 function statusOf(cell) {
   if (!cell) return "none";
   const { quantity, min, max } = cell;
-  if (min == null) return quantity > 0 ? "ok" : "none";
+  // ไม่มีคงเหลือเลย (0 หรือไม่มีค่า) ให้ถือเป็น "ไม่มี" (เทา) เสมอ ไม่ตีเป็น "ต่ำกว่า Min" (แดง)
+  // เพราะ "ต่ำกว่า Min" ควรสื่อถึงมีของอยู่บ้างแต่ไม่พอ ไม่ใช่กรณีไม่มีของเลย
+  if (!quantity || quantity <= 0) return "none";
+  if (min == null) return "ok";
   if (quantity < min) return "low";
   if (min > 0 && quantity <= min * 1.2) return "near";
   if (max != null && quantity > max) return "over";
