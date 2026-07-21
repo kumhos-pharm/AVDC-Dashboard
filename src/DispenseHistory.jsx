@@ -222,11 +222,16 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
                   </div>
                 )}
 
-                {/* แถวที่ 2: ชื่อยา + ความแรงของยา (เด่นสุดเป็นสีน้ำเงินตามภาพ) */}
-                <div className="text-sm font-extrabold text-[#1d68a4] flex items-center gap-1">
+                {/* แถวที่ 2: ชื่อยา + ความแรงของยา + รูปแบบยา (เด่นสุดเป็นสีน้ำเงินตามภาพ) */}
+                <div className="text-sm font-extrabold text-[#1d68a4] flex flex-wrap items-center gap-1">
                   🔗 {r.drug_name}
                   {r.strength && (
                     <span className="text-sm font-bold text-[#4a9bd1]">({r.strength})</span>
+                  )}
+                  {r.drug_form && (
+                    <span className="rounded-full bg-[#eaf4fb] px-2 py-0.5 text-[11px] font-semibold text-[#1d68a4]">
+                      {r.drug_form}
+                    </span>
                   )}
                 </div>
 
@@ -236,7 +241,7 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
                     Lot: <span className="font-semibold text-slate-700">{r.lot || "-"}</span>
                   </span>
                   <span>
-                    {isReplenish ? (isReplenishIn ? "รับเข้า" : "เติมออก") : "จ่าย"}:{" "}
+                    {isReplenish ? (isReplenishIn ? "รับเข้า" : "จ่ายออก") : "จ่าย"}:{" "}
                     <span className={`font-bold ${isReplenishIn ? "text-emerald-600" : "text-red-600"}`}>
                       {isReplenishIn ? "+" : ""}{Math.abs(r.change_qty)}
                     </span>{" "}

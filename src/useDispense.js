@@ -73,8 +73,9 @@ export function useDispenseHistory(searchTerm) {
       const lotRowIds = [...new Set(dispenseRows.map((r) => r.lot_row_id).filter(Boolean))];
       const departmentIds = [...new Set(dispenseRows.map((r) => r.department_id).filter(Boolean))];
       const drugIds = [...new Set(dispenseRows.map((r) => r.drug_id).filter(Boolean))];
+      const rowIds = [...new Set(dispenseRows.map((r) => r.id).filter(Boolean))];
 
-      const [byIdRes, byTextRes, deptRes] = await Promise.all([
+      const [byIdRes, byTextRes, deptRes, drugRes, movementRes] = await Promise.all([
         lotRowIds.length > 0
           ? supabase.from("drug_lots").select("id, quantity").in("id", lotRowIds)
           : Promise.resolve({ data: [] }),
@@ -86,6 +87,16 @@ export function useDispenseHistory(searchTerm) {
         // ชื่อหน่วยงาน — ใช้แสดง "หน่วยงานที่เติม/หน่วยงานที่จ่าย" ในการ์ดประวัติ
         departmentIds.length > 0
           ? supabase.from("departments").select("id, name").in("id", departmentIds)
+          : Promise.resolve({ data: [] }),
+        // ดึง "รูปแบบยา" ตรงจากตาราง drugs ด้วย drug_id เสมอ ไม่พึ่ง view (view อาจไม่มีคอลัมน์นี้ หรือคอลัมน์ไม่ตรง
+        // ทำให้ก่อนหน้านี้รูปแบบยาในประวัติดึงไม่ตรง/ไม่ขึ้นเลย)
+        drugIds.length > 0
+          ? supabase.from("drugs").select("id, form, strength").in("id", drugIds)
+          : Promise.resolve({ data: [] }),
+        // ดึง transfer_group_id ตรงจาก stock_movements ด้วย id เสมอ เผื่อ view ยังไม่มีคอลัมน์นี้
+        // (สาเหตุที่ปุ่ม "ยกเลิกการเติมยา" ใช้งานไม่ได้/เป็นสีเทาค้าง เพราะ r.transfer_group_id เป็น undefined ตลอด)
+        rowIds.length > 0
+          ? supabase.from("stock_movements").select("id, transfer_group_id").in("id", rowIds)
           : Promise.resolve({ data: [] }),
       ]);
 
@@ -100,6 +111,12 @@ export function useDispenseHistory(searchTerm) {
       const deptMap = new Map();
       (deptRes.data ?? []).forEach((d) => deptMap.set(String(d.id), d.name));
 
+      const drugMap = new Map();
+      (drugRes.data ?? []).forEach((d) => drugMap.set(String(d.id), d));
+
+      const movementMap = new Map();
+      (movementRes.data ?? []).forEach((m) => movementMap.set(m.id, m.transfer_group_id));
+
       dispenseRows.forEach((r) => {
         if (r.lot_row_id && idMap.has(r.lot_row_id)) {
           r.remaining_qty = idMap.get(r.lot_row_id);
@@ -108,6 +125,15 @@ export function useDispenseHistory(searchTerm) {
           r.remaining_qty = lotMap.has(key) ? lotMap.get(key) : null;
         }
         r.department_name = deptMap.get(String(r.department_id)) || null;
+
+        const drugInfo = drugMap.get(String(r.drug_id));
+        r.drug_form = drugInfo?.form || r.drug_form || r.form || null;
+        // เผื่อรายการเก่าที่บันทึกความแรงไว้ในประวัติเองแล้ว ให้ยึดค่าของประวัติก่อน ถ้าไม่มีค่อย fallback ไปที่ตัวยา
+        r.strength = r.strength || drugInfo?.strength || null;
+
+        if (movementMap.has(r.id)) {
+          r.transfer_group_id = movementMap.get(r.id);
+        }
       });
     }
 
