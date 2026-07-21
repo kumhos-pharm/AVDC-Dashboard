@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { History, Search, Pencil, Trash2, User, ChevronLeft, ChevronRight } from "lucide-react";
+import { History, Search, Pencil, Trash2, User, ChevronLeft, ChevronRight, ArrowRightLeft } from "lucide-react";
 import Swal from "sweetalert2";
 import "sweetalert2/dist/sweetalert2.min.css";
 import { useDispenseHistory, deleteDispense } from "./useDispense";
@@ -125,41 +125,56 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
 
         {pagedRows.map((r) => {
           const { date, time } = formatThaiDate(r.created_at);
+          const isReplenish = r.reason === "replenish_out" || r.reason === "replenish_in";
+          const isReplenishIn = r.reason === "replenish_in";
           return (
             <div
               key={r.id}
               className={`relative flex gap-4 rounded-xl border p-4 shadow-sm transition-all ${
                 editingId === r.id
                   ? "border-amber-400 bg-amber-50/50 ring-1 ring-amber-300"
+                  : isReplenish
+                  ? "border-blue-200 bg-blue-50/30 hover:border-blue-300 hover:shadow-md hover:-translate-y-0.5"
                   : "border-slate-200 hover:border-slate-300 hover:shadow-md hover:-translate-y-0.5"
               }`}
             >
               
               {/* ด้านซ้าย: วันที่และเวลาที่บันทึก */}
-              <div className="flex flex-col items-center justify-start border-r border-slate-200 pr-4 min-w-[90px] text-center">
-                <span className="flex items-center gap-1.5 text-sm font-bold text-[#198754]">
-                  <span className="h-2 w-2 rounded-full bg-[#198754]" />
+              <div className={`flex flex-col items-center justify-start border-r pr-4 min-w-[90px] text-center ${isReplenish ? "border-blue-100" : "border-slate-200"}`}>
+                <span className={`flex items-center gap-1.5 text-sm font-bold ${isReplenish ? "text-[#2f8fdc]" : "text-[#198754]"}`}>
+                  <span className={`h-2 w-2 rounded-full ${isReplenish ? "bg-[#2f8fdc]" : "bg-[#198754]"}`} />
                   {date.split(' ')[0]} {date.split(' ')[1]}
                 </span>
-                <span className="text-sm font-bold text-[#198754]">{date.split(' ')[2]}</span>
+                <span className={`text-sm font-bold ${isReplenish ? "text-[#2f8fdc]" : "text-[#198754]"}`}>{date.split(' ')[2]}</span>
                 <span className="mt-1 text-[12px] text-slate-500 flex items-center gap-1 justify-center">
                   🕒 {time}
                 </span>
               </div>
 
-              {/* ด้านขวา: ข้อมูลการจ่ายยา */}
+              {/* ด้านขวา: ข้อมูลการจ่ายยา / เติมยาหน่วยงาน */}
               <div className="flex-1 space-y-1.5">
-                
-                {/* แถวที่ 1: ชื่อผู้ป่วย และ HN */}
-                <div className="flex flex-wrap items-center gap-1.5 text-sm">
-                  <User className="h-4 w-4 text-slate-500" />
-                  <span className="font-bold text-slate-800">
-                    {r.patient_prefix}{r.patient_name || "-"}
-                  </span>
-                  <span className="rounded-full bg-slate-500 px-2 py-0.5 text-[11px] font-bold text-white">
-                    HN: {r.patient_hn || "-"}
-                  </span>
-                </div>
+
+                {isReplenish ? (
+                  /* แถวที่ 1 (โหมดเติมยาหน่วยงาน): แสดงทิศทางการเติม แทนข้อมูลผู้ป่วย */
+                  <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                    <ArrowRightLeft className="h-4 w-4 text-[#2f8fdc]" />
+                    <span className="font-bold text-slate-800">{r.note || (isReplenishIn ? "รับเติมยา" : "เติมยาหน่วยงาน")}</span>
+                    <span className="rounded-full bg-[#2f8fdc] px-2 py-0.5 text-[11px] font-bold text-white">
+                      เติมยาหน่วยงาน
+                    </span>
+                  </div>
+                ) : (
+                  /* แถวที่ 1: ชื่อผู้ป่วย และ HN */
+                  <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                    <User className="h-4 w-4 text-slate-500" />
+                    <span className="font-bold text-slate-800">
+                      {r.patient_prefix}{r.patient_name || "-"}
+                    </span>
+                    <span className="rounded-full bg-slate-500 px-2 py-0.5 text-[11px] font-bold text-white">
+                      HN: {r.patient_hn || "-"}
+                    </span>
+                  </div>
+                )}
 
                 {/* แถวที่ 2: ชื่อยา + ความแรงของยา (เด่นสุดเป็นสีน้ำเงินตามภาพ) */}
                 <div className="text-sm font-extrabold text-[#1d68a4] flex items-center gap-1">
@@ -175,15 +190,21 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
                     Lot: <span className="font-semibold text-slate-700">{r.lot || "-"}</span>
                   </span>
                   <span>
-                    จ่าย: <span className="font-bold text-red-600">{Math.abs(r.change_qty)}</span> <span className="text-slate-500">{r.unit || "Vial"}</span>
-                  </span>
-                  <span>
-                    คงเหลือ:{" "}
-                    <span className="font-bold text-emerald-600">
-                      {remainingQty(r) !== null ? remainingQty(r) : "-"}
+                    {isReplenish ? (isReplenishIn ? "รับเข้า" : "เติมออก") : "จ่าย"}:{" "}
+                    <span className={`font-bold ${isReplenishIn ? "text-emerald-600" : "text-red-600"}`}>
+                      {isReplenishIn ? "+" : ""}{Math.abs(r.change_qty)}
                     </span>{" "}
                     <span className="text-slate-500">{r.unit || "Vial"}</span>
                   </span>
+                  {!isReplenish && (
+                    <span>
+                      คงเหลือ:{" "}
+                      <span className="font-bold text-emerald-600">
+                        {remainingQty(r) !== null ? remainingQty(r) : "-"}
+                      </span>{" "}
+                      <span className="text-slate-500">{r.unit || "Vial"}</span>
+                    </span>
+                  )}
                   <span className="ml-auto text-[12px] font-bold bg-red-50 text-red-600 px-2 py-0.5 rounded border border-red-100">
                     Exp: {formatExpDate(r.exp_date)}
                   </span>
@@ -191,30 +212,32 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
 
                 {/* แถวที่ 4: ผู้บันทึก/ผู้จ่าย */}
                 <div className="pt-1 border-t border-dashed border-slate-100 text-[12px] text-slate-500 flex items-center gap-1.5">
-                  <span className="opacity-75">👤 ผู้จ่าย:</span>
+                  <span className="opacity-75">👤 {isReplenish ? "ผู้บันทึก:" : "ผู้จ่าย:"}</span>
                   <span className="font-medium text-slate-700">{r.staff_name || "ไม่ระบุ"}</span>
                 </div>
               </div>
 
-              {/* ปุ่ม Action ลบ/แก้ไขที่มุมขวาบน */}
-              <div className="absolute right-3 top-3 flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => onEditRequest && onEditRequest(r)}
-                  className="rounded border border-amber-300 p-1 text-amber-500 hover:bg-amber-50"
-                  title="แก้ไข (ไปแสดงในฟอร์มด้านข้าง)"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(r)}
-                  className="rounded border border-red-300 p-1 text-red-500 hover:bg-red-50"
-                  title="ลบ"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
+              {/* ปุ่ม Action ลบ/แก้ไขที่มุมขวาบน (โหมดเติมยาหน่วยงานยังแก้ไข/ลบจากการ์ดนี้ไม่ได้ เพราะกระทบสต็อก 2 หน่วยงานพร้อมกัน) */}
+              {!isReplenish && (
+                <div className="absolute right-3 top-3 flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => onEditRequest && onEditRequest(r)}
+                    className="rounded border border-amber-300 p-1 text-amber-500 hover:bg-amber-50"
+                    title="แก้ไข (ไปแสดงในฟอร์มด้านข้าง)"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(r)}
+                    className="rounded border border-red-300 p-1 text-red-500 hover:bg-red-50"
+                    title="ลบ"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
 
             </div>
           );

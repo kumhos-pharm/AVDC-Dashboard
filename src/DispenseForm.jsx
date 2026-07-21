@@ -43,6 +43,14 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
   const [departmentId, setDepartmentId] = useState("");
   const [departments, setDepartments] = useState([]);
 
+  // โหมดของฟอร์ม: "dispense" = จ่ายยาให้ผู้ป่วย (ปกติ), "replenish" = เติมยาหน่วยงาน (จาก AVDC ไปหน่วยงานอื่น)
+  // สลับโหมดได้เฉพาะตอนจ่ายยาใหม่เท่านั้น (ปิดใช้งานระหว่างแก้ไขรายการเดิมจากประวัติ)
+  const [mode, setMode] = useState("dispense");
+  const [destDepartmentId, setDestDepartmentId] = useState("");
+
+  // หน่วยงานหลัก (ศูนย์ AVDC / Phar-OPD) คือต้นทางเดียวที่เติมยาให้หน่วยงานอื่นได้
+  const homeDepartment = departments.find((d) => d.is_home);
+
   // เภสัชกร/เจ้าหน้าที่ผู้จ่าย (ค้นหาแบบ autocomplete จากตาราง staff)
   const [staffList, setStaffList] = useState([]);
   const [filteredStaff, setFilteredStaff] = useState([]);
@@ -149,6 +157,40 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
       console.error("Error fetching drugs:", error.message);
       setDrugList([]);
       setDrugFetchError("ไม่สามารถดึงรายการยาได้: " + error.message);
+    }
+  };
+
+  // สลับโหมด "จ่ายยาให้ผู้ป่วย" <-> "เติมยาหน่วยงาน"
+  // โหมดเติมยา: ล็อกหน่วยงานที่จ่ายเป็น AVDC (ต้นทางเดียว) และล้างข้อมูลผู้ป่วย/หน่วยงานปลายทางเดิมทิ้ง
+  const handleModeChange = (nextMode) => {
+    if (nextMode === mode) return;
+    setMode(nextMode);
+    setDestDepartmentId("");
+    setFormData((prev) => ({
+      ...prev,
+      prefix: "",
+      patientName: "",
+      hn: "",
+      searchDrug: "",
+      drugId: "",
+      lotRowId: "",
+      strength: "",
+      drugType: "",
+      unit: "",
+      lotNumber: "",
+      mfgDate: "",
+      expDate: "",
+      mfgDateRaw: "",
+      expDateRaw: "",
+      maxQuantity: undefined,
+    }));
+    setFilteredDrugs([]);
+    setShowDropdown(false);
+
+    if (nextMode === "replenish" && homeDepartment) {
+      setDepartmentId(homeDepartment.id);
+    } else {
+      setDepartmentId("");
     }
   };
 
@@ -366,6 +408,31 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
     return lines.join("\n");
   };
 
+  // สร้างข้อความสรุปการเติมยาหน่วยงาน สำหรับส่งเข้ากลุ่มไลน์
+  const buildReplenishMessage = (qty, destDeptName, remainingAtAvdc) => {
+    const lines = [
+      "📦 เติมยาหน่วยงาน! 🔄",
+      "------------------------------",
+      `🏥 จาก: ศูนย์ AVDC (Phar-OPD)`,
+      `🏥 ถึง: ${destDeptName}`,
+      "------------------------------",
+      "รายการยา:",
+      `🔹 ${formData.searchDrug || "-"}${formData.strength ? ` (${formData.strength})` : ""}`,
+      `📦 รูปแบบ: ${formData.drugType || "-"}`,
+      `🔢 จำนวนที่เติม: ${qty} ${formData.unit || ""}`,
+    ];
+    if (remainingAtAvdc !== undefined && remainingAtAvdc !== null) {
+      lines.push(`📦 คงเหลือที่ AVDC: ${remainingAtAvdc} ${formData.unit || ""}`);
+    }
+    lines.push(
+      `🏷️ Lot: ${formData.lotNumber || "-"}`,
+      `📅 EXP: ${formData.expDate || "-"}`,
+      "------------------------------",
+      `👤 ผู้บันทึก: ${formData.staff || "-"}`
+    );
+    return lines.join("\n");
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -442,6 +509,128 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
       return;
     }
 
+    // โหมดเติมยาหน่วยงาน: ตัดสต็อกจาก AVDC (ต้นทาง) แล้วบวกเข้าล็อตของหน่วยงานปลายทาง
+    if (mode === "replenish") {
+      if (
+        !departmentId ||
+        !destDepartmentId ||
+        !formData.staff ||
+        !formData.lotRowId ||
+        !formData.quantity
+      ) {
+        alert("กรุณากรอกข้อมูลสำคัญให้ครบถ้วน (หน่วยงานปลายทาง, ผู้บันทึก, รายการยา, จำนวน)");
+        return;
+      }
+
+      const replenishQty = parseInt(formData.quantity);
+      if (replenishQty <= 0) {
+        alert("จำนวนที่เติมต้องมากกว่า 0");
+        return;
+      }
+      if (replenishQty > formData.maxQuantity) {
+        alert(`ยอดสต็อกไม่พอเติม (คงเหลือที่ AVDC: ${formData.maxQuantity})`);
+        return;
+      }
+
+      const destDeptName = departments.find((d) => d.id === destDepartmentId)?.name || "-";
+
+      setLoading(true);
+      try {
+        // 1. บันทึกประวัติฝั่งตัดออกจาก AVDC ลง stock_movements
+        const { error: outError } = await supabase.from("stock_movements").insert([
+          {
+            drug_id: formData.drugId,
+            department_id: departmentId,
+            change_qty: -replenishQty,
+            reason: "replenish_out",
+            note: `เติมให้ ${destDeptName}`,
+            staff_name: formData.staff,
+            lot: formData.lotNumber,
+            lot_row_id: formData.lotRowId,
+            mfg_date: formData.mfgDateRaw || null,
+            exp_date: formData.expDateRaw || null,
+          },
+        ]);
+        if (outError) throw outError;
+
+        // 2. หักสต็อกล็อตต้นทางที่ AVDC ทำโดย trigger `trg_apply_stock_movement` อัตโนมัติจากขั้นตอนที่ 1
+        // (ไม่ต้อง .update() drug_lots เอง มิเช่นนั้นจะหักซ้ำ 2 เด้ง)
+        const newSourceQty = formData.maxQuantity - replenishQty; // ใช้แค่โชว์ในข้อความแจ้งเตือนเท่านั้น
+
+        // 3. หาล็อตเดิมที่หน่วยงานปลายทาง (ยา+เลขล็อตเดียวกัน)
+        // ถ้ามีอยู่แล้ว ไม่ต้อง update quantity เอง เดี๋ยว trigger จะบวกให้จากขั้นตอนที่ 4
+        // ถ้ายังไม่มี ต้องสร้างล็อตใหม่ไว้ก่อนเพื่อให้มี id ให้ trigger อ้างอิงได้ โดยตั้ง quantity เริ่มต้น = 0
+        // (ห้ามตั้งเป็นจำนวนที่เติมตรงนี้ เพราะ trigger จะมาบวกทับให้อีกที กลายเป็นบวกซ้ำ 2 เท่า)
+        const { data: existingLot, error: findError } = await supabase
+          .from("drug_lots")
+          .select("id, quantity")
+          .eq("drug_id", formData.drugId)
+          .eq("department_id", destDepartmentId)
+          .eq("lot", formData.lotNumber)
+          .maybeSingle();
+        if (findError) throw findError;
+
+        let destLotRowId = null;
+        if (existingLot) {
+          destLotRowId = existingLot.id;
+        } else {
+          const { data: newLot, error: destInsertError } = await supabase
+            .from("drug_lots")
+            .insert([
+              {
+                drug_id: formData.drugId,
+                department_id: destDepartmentId,
+                lot: formData.lotNumber,
+                mfg_date: formData.mfgDateRaw || null,
+                exp_date: formData.expDateRaw || null,
+                quantity: 0,
+              },
+            ])
+            .select()
+            .single();
+          if (destInsertError) throw destInsertError;
+          destLotRowId = newLot?.id || null;
+        }
+
+        // 4. บันทึกประวัติฝั่งรับเข้าที่หน่วยงานปลายทาง (ไปโผล่ในเมนู "เติมยาหน่วยงาน" ของหน่วยงานนั้น)
+        const { error: inError } = await supabase.from("stock_movements").insert([
+          {
+            drug_id: formData.drugId,
+            department_id: destDepartmentId,
+            change_qty: replenishQty,
+            reason: "replenish_in",
+            note: "รับเติมจากศูนย์ AVDC",
+            staff_name: formData.staff,
+            lot: formData.lotNumber,
+            lot_row_id: destLotRowId,
+            mfg_date: formData.mfgDateRaw || null,
+            exp_date: formData.expDateRaw || null,
+          },
+        ]);
+        if (inError) throw inError;
+
+        Swal.fire({
+          ...swalBase,
+          icon: "success",
+          title: "เติมยาสำเร็จ",
+          text: `เติมยาให้ ${destDeptName} เรียบร้อยแล้ว`,
+          timer: 1500,
+          showConfirmButton: false,
+        });
+        notifyLine(buildReplenishMessage(replenishQty, destDeptName, newSourceQty));
+
+        resetForm();
+        fetchDrugs(departmentId);
+        if (onSaved) onSaved();
+      } catch (error) {
+        console.error("Error replenishing drug:", error.message);
+        alert("ล้มเหลว: " + error.message);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     if (
       !departmentId ||
       !formData.patientName ||
@@ -491,14 +680,9 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
 
       if (insertError) throw insertError;
 
-      // 2. หักยอดสต็อกของ "ล็อตนี้" ในตาราง drug_lots (ไม่ใช่ drugs)
-      const newQuantity = formData.maxQuantity - dispenseQty;
-      const { error: updateError } = await supabase
-        .from("drug_lots")
-        .update({ quantity: newQuantity })
-        .eq("id", formData.lotRowId);
-
-      if (updateError) throw updateError;
+      // 2. หักยอดสต็อกของ "ล็อตนี้" ทำโดย trigger `trg_apply_stock_movement` อัตโนมัติ
+      // (ทำงานตอน insert แถวข้างบนไปแล้ว) — ไม่ต้อง .update() drug_lots เองอีก มิเช่นนั้นจะหักซ้ำ 2 เด้ง
+      const newQuantity = formData.maxQuantity - dispenseQty; // ใช้แค่โชว์ในข้อความแจ้งเตือนเท่านั้น ไม่ได้เขียนลง DB
 
       Swal.fire({ ...swalBase, icon: "success", title: "บันทึกสำเร็จ", text: "บันทึกข้อมูลและตัดสต็อกเรียบร้อยแล้ว", timer: 1500, showConfirmButton: false });
       notifyLine(buildDispenseMessage(dispenseQty, newQuantity));
@@ -530,6 +714,34 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
           <h2 className="text-xl font-bold text-[#0056b3]">บันทึกการจ่ายยา</h2>
         </div>
 
+        {/* แท็บสลับโหมด: จ่ายยาให้ผู้ป่วย / เติมยาหน่วยงาน (ซ่อนระหว่างแก้ไขรายการเดิม) */}
+        {!isEditMode && (
+          <div className="flex gap-1.5 rounded-xl bg-slate-100 p-1">
+            <button
+              type="button"
+              onClick={() => handleModeChange("dispense")}
+              className={`flex-1 rounded-lg py-2 text-sm font-bold transition-all ${
+                mode === "dispense"
+                  ? "bg-white text-[#007bff] shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              จ่ายยาให้ผู้ป่วย
+            </button>
+            <button
+              type="button"
+              onClick={() => handleModeChange("replenish")}
+              className={`flex-1 rounded-lg py-2 text-sm font-bold transition-all ${
+                mode === "replenish"
+                  ? "bg-white text-[#007bff] shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              เติมยาหน่วยงาน
+            </button>
+          </div>
+        )}
+
         {/* แถบแจ้งว่ากำลังแก้ไขรายการเดิม (แทนที่ popup) */}
         {isEditMode && (
           <div className="flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -549,12 +761,15 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
 
         {/* หน่วยงานที่จ่าย ต้องเลือกก่อน เพราะสต็อก/ล็อตที่ค้นหาได้ผูกกับหน่วยงานนี้ */}
         <div>
-          <label className="mb-1 block text-sm font-bold text-[#2f8fdc]">หน่วยงานที่จ่าย *</label>
+          <label className="mb-1 block text-sm font-bold text-[#2f8fdc]">
+            {mode === "replenish" ? "หน่วยงานที่เติม (ต้นทาง)" : "หน่วยงานที่จ่าย"} *
+          </label>
           <select
             value={departmentId}
             onChange={handleDepartmentChange}
             required
-            className="w-full rounded-lg border border-[#2f8fdc] px-3 py-2 text-sm h-11 focus:outline-none focus:ring-2 focus:ring-[#2f8fdc]"
+            disabled={mode === "replenish"}
+            className="w-full rounded-lg border border-[#2f8fdc] px-3 py-2 text-sm h-11 focus:outline-none focus:ring-2 focus:ring-[#2f8fdc] disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed"
           >
             <option value="">เลือกหน่วยงาน</option>
             {departments.map((d) => (
@@ -563,12 +778,34 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
               </option>
             ))}
           </select>
-          {!departmentId && (
+          {mode === "dispense" && !departmentId && (
             <p className="mt-1 text-[12px] text-red-500">กรุณาเลือกหน่วยงานก่อนค้นหารายการยา</p>
           )}
         </div>
 
-        {/* แถวที่ 1: คำนำหน้า, ชื่อ-นามสกุล, HN */}
+        {/* โหมดเติมยาหน่วยงาน: เลือกหน่วยงานปลายทางที่จะรับยา (ทุกหน่วยงาน ยกเว้น AVDC เอง) */}
+        {mode === "replenish" && (
+          <div>
+            <label className="mb-1 block text-sm font-bold text-[#2f8fdc]">หน่วยงานปลายทาง *</label>
+            <select
+              value={destDepartmentId}
+              onChange={(e) => setDestDepartmentId(e.target.value)}
+              required
+              className="w-full rounded-lg border border-[#2f8fdc] px-3 py-2 text-sm h-11 focus:outline-none focus:ring-2 focus:ring-[#2f8fdc]"
+            >
+              <option value="">เลือกหน่วยงาน</option>
+              {departments.filter((d) => !d.is_home).map((d) => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
+            {!destDepartmentId && (
+              <p className="mt-1 text-[12px] text-red-500">กรุณาเลือกหน่วยงานปลายทางก่อนค้นหารายการยา</p>
+            )}
+          </div>
+        )}
+
+        {/* แถวที่ 1: คำนำหน้า, ชื่อ-นามสกุล, HN (เฉพาะโหมดจ่ายยาให้ผู้ป่วยเท่านั้น) */}
+        {mode === "dispense" && (
         <div className="grid grid-cols-12 gap-3">
           <div className="col-span-3">
             <label className="block text-sm font-bold text-slate-800 mb-1">คำนำหน้า</label>
@@ -605,6 +842,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
             />
           </div>
         </div>
+        )}
 
         {/* แถวที่ 2: วันที่จ่าย, เวลา */}
         <div className="grid grid-cols-2 gap-4">
@@ -670,8 +908,12 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
           </label>
           <input 
             type="text" 
-            placeholder={departmentId ? "พิมพ์ชื่อยา หรือใช้ลูกศร ↑↓ เพื่อเลือก..." : "กรุณาเลือกหน่วยงานก่อน"}
-            disabled={!departmentId}
+            placeholder={
+              mode === "replenish" && !destDepartmentId
+                ? "กรุณาเลือกหน่วยงานปลายทางก่อน"
+                : departmentId ? "พิมพ์ชื่อยา หรือใช้ลูกศร ↑↓ เพื่อเลือก..." : "กรุณาเลือกหน่วยงานก่อน"
+            }
+            disabled={!departmentId || (mode === "replenish" && !destDepartmentId)}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#007bff] focus:outline-none focus:ring-2 focus:ring-[#007bff] h-11 disabled:bg-slate-50 disabled:cursor-not-allowed"
             value={formData.searchDrug}
             onChange={handleSearchDrugChange}
@@ -752,7 +994,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
           </div>
           <div>
             <label className="block text-sm font-bold text-[#007bff] mb-1">
-              จำนวนที่จ่าย{formData.unit ? ` (${formData.unit})` : ""}
+              {mode === "replenish" ? "จำนวนที่เติม" : "จำนวนที่จ่าย"}{formData.unit ? ` (${formData.unit})` : ""}
             </label>
             <input 
               type="number" 
@@ -800,7 +1042,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
           disabled={loading}
           className="w-full mt-4 flex items-center justify-center gap-2 rounded-xl bg-[#007bff] py-3 text-base font-bold text-white shadow-sm hover:bg-[#0069d9] active:scale-[0.99] transition-all disabled:opacity-50 h-12"
         >
-          <Save className="h-5 w-5" /> {loading ? "กำลังบันทึก..." : "บันทึกข้อมูลและตัดสต็อก"}
+          <Save className="h-5 w-5" /> {loading ? "กำลังบันทึก..." : mode === "replenish" ? "บันทึกการเติมยาหน่วยงาน" : "บันทึกข้อมูลและตัดสต็อก"}
         </button>
 
       </form>

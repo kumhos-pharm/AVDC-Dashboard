@@ -55,10 +55,12 @@ export function useDispenseHistory(searchTerm) {
 
   const reload = useCallback(async () => {
     setLoading(true);
+    // รวมทั้งรายการ "จ่ายยาผู้ป่วย" (dispense) และ "เติมยาหน่วยงาน" (replenish_out/replenish_in)
+    // ให้แสดงในประวัติเดียวกัน — ฝั่ง UI (DispenseHistory.jsx) จะแยกดีไซน์การ์ดตาม r.reason เอง
     const { data } = await supabase
       .from("v_recent_dispenses")
       .select("*")
-      .eq("reason", "dispense")
+      .in("reason", ["dispense", "replenish_out", "replenish_in"])
       .order("created_at", { ascending: false })
       .limit(50);
 
