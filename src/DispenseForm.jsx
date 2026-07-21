@@ -534,6 +534,11 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
 
       const destDeptName = departments.find((d) => String(d.id) === String(destDepartmentId))?.name || "-";
 
+      // รหัสจับคู่ระหว่างแถว replenish_out (AVDC) กับ replenish_in (หน่วยงานปลายทาง) ของการเติมยาครั้งนี้
+      // ใช้ตอนกด "ยกเลิกการเติมยา" ในหน้าประวัติ เพื่อลบทั้งคู่พร้อมกันแบบแม่นยำ 100%
+      // (ไม่ต้องเดาจากยา/ล็อต/เวลา ซึ่งเสี่ยงจับคู่ผิดถ้ามีรายการซ้ำในเวลาใกล้กัน)
+      const transferGroupId = crypto.randomUUID();
+
       setLoading(true);
       try {
         // 1. บันทึกประวัติฝั่งตัดออกจาก AVDC ลง stock_movements
@@ -549,6 +554,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
             lot_row_id: formData.lotRowId,
             mfg_date: formData.mfgDateRaw || null,
             exp_date: formData.expDateRaw || null,
+            transfer_group_id: transferGroupId,
           },
         ]);
         if (outError) throw outError;
@@ -605,6 +611,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
             lot_row_id: destLotRowId,
             mfg_date: formData.mfgDateRaw || null,
             exp_date: formData.expDateRaw || null,
+            transfer_group_id: transferGroupId,
           },
         ]);
         if (inError) throw inError;

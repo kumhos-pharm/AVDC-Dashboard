@@ -74,7 +74,7 @@ export function useDispenseHistory(searchTerm) {
       const departmentIds = [...new Set(dispenseRows.map((r) => r.department_id).filter(Boolean))];
       const drugIds = [...new Set(dispenseRows.map((r) => r.drug_id).filter(Boolean))];
 
-      const [byIdRes, byTextRes] = await Promise.all([
+      const [byIdRes, byTextRes, deptRes] = await Promise.all([
         lotRowIds.length > 0
           ? supabase.from("drug_lots").select("id, quantity").in("id", lotRowIds)
           : Promise.resolve({ data: [] }),
@@ -83,6 +83,10 @@ export function useDispenseHistory(searchTerm) {
           .select("department_id, drug_id, lot, quantity")
           .in("department_id", departmentIds)
           .in("drug_id", drugIds),
+        // ชื่อหน่วยงาน — ใช้แสดง "หน่วยงานที่เติม/หน่วยงานที่จ่าย" ในการ์ดประวัติ
+        departmentIds.length > 0
+          ? supabase.from("departments").select("id, name").in("id", departmentIds)
+          : Promise.resolve({ data: [] }),
       ]);
 
       const idMap = new Map();
@@ -93,13 +97,17 @@ export function useDispenseHistory(searchTerm) {
         lotMap.set(`${l.department_id}|${l.drug_id}|${l.lot}`, l.quantity);
       });
 
+      const deptMap = new Map();
+      (deptRes.data ?? []).forEach((d) => deptMap.set(String(d.id), d.name));
+
       dispenseRows.forEach((r) => {
         if (r.lot_row_id && idMap.has(r.lot_row_id)) {
           r.remaining_qty = idMap.get(r.lot_row_id);
-          return;
+        } else {
+          const key = `${r.department_id}|${r.drug_id}|${r.lot}`;
+          r.remaining_qty = lotMap.has(key) ? lotMap.get(key) : null;
         }
-        const key = `${r.department_id}|${r.drug_id}|${r.lot}`;
-        r.remaining_qty = lotMap.has(key) ? lotMap.get(key) : null;
+        r.department_name = deptMap.get(String(r.department_id)) || null;
       });
     }
 
@@ -156,6 +164,25 @@ export async function submitDispense(payload) {
 // ลบรายการ (trigger จะคืนยอดสต็อกให้อัตโนมัติ)
 export async function deleteDispense(id) {
   const { error } = await supabase.from("stock_movements").delete().eq("id", id);
+  return { error };
+}
+
+// ยกเลิกการเติมยา 1 ครั้ง — ลบทั้งแถว replenish_out (AVDC) และ replenish_in (หน่วยงานปลายทาง) พร้อมกัน
+// จับคู่ด้วย transfer_group_id เท่านั้น (แม่นยำ 100%) ไม่เดาจากยา/ล็อต/เวลา
+// trigger trg_reverse_stock_movement จะยิงแยกทีละแถวที่ถูกลบ ทำให้สต็อกทั้ง 2 ฝั่งถูกคืนกลับถูกต้องในคำสั่งเดียว
+// รายการเก่าก่อนมีคอลัมน์นี้ (transfer_group_id เป็น null) จะไม่สามารถยกเลิกอัตโนมัติได้ ต้องกันไว้ตั้งแต่ฝั่ง UI
+export async function cancelReplenish(transferGroupId) {
+  if (!transferGroupId) {
+    return {
+      error: new Error(
+        "รายการนี้บันทึกไว้ก่อนมีระบบยกเลิกอัตโนมัติ (ไม่มี transfer_group_id) กรุณาติดต่อผู้ดูแลระบบเพื่อแก้ไขสต็อกด้วยตนเอง"
+      ),
+    };
+  }
+  const { error } = await supabase
+    .from("stock_movements")
+    .delete()
+    .eq("transfer_group_id", transferGroupId);
   return { error };
 }
 

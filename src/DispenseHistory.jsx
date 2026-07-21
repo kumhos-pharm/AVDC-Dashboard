@@ -1,8 +1,8 @@
 import React, { useState } from "react";
-import { History, Search, Pencil, Trash2, User, ChevronLeft, ChevronRight, ArrowRightLeft } from "lucide-react";
+import { History, Search, Pencil, Trash2, User, ChevronLeft, ChevronRight, ArrowRightLeft, RotateCcw } from "lucide-react";
 import Swal from "sweetalert2";
 import "sweetalert2/dist/sweetalert2.min.css";
-import { useDispenseHistory, deleteDispense } from "./useDispense";
+import { useDispenseHistory, deleteDispense, cancelReplenish } from "./useDispense";
 
 // แปลงวันที่เป็น พ.ศ. และรูปแบบย่อตามภาพ (เช่น 9 ก.ค. 2569)
 function formatThaiDate(iso) {
@@ -95,6 +95,46 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
     reload();
   }
 
+  // ยกเลิกการเติมยา 1 ครั้ง — ลบทั้งแถว "ตัดออกจาก AVDC" และ "รับเข้าที่หน่วยงานปลายทาง" พร้อมกันในคลิกเดียว
+  async function handleCancelReplenish(r) {
+    if (!r.transfer_group_id) {
+      Swal.fire({
+        ...swalBase,
+        icon: "info",
+        title: "ยกเลิกอัตโนมัติไม่ได้",
+        text: "รายการนี้บันทึกไว้ก่อนมีระบบยกเลิกอัตโนมัติ กรุณาติดต่อผู้ดูแลระบบเพื่อแก้ไขสต็อกด้วยตนเอง",
+      });
+      return;
+    }
+
+    const isReplenishIn = r.reason === "replenish_in";
+    const result = await Swal.fire({
+      ...swalBase,
+      icon: "warning",
+      title: "ยกเลิกการเติมยานี้ใช่ไหม?",
+      html: `<b>${r.drug_name || ""}</b> (Lot ${r.lot || "-"}) จำนวน ${Math.abs(r.change_qty)} ${r.unit || "Vial"}<br/>
+             ${isReplenishIn ? "จะถูกดึงคืน" : "จะถูกยกเลิก"} ทั้ง 2 ฝั่ง (ต้นทาง AVDC และปลายทาง) พร้อมกัน<br/>
+             ยอดสต็อกทั้ง 2 หน่วยงานจะถูกคืนกลับอัตโนมัติ`,
+      showCancelButton: true,
+      confirmButtonText: "ยกเลิกการเติมยา",
+      cancelButtonText: "ปิด",
+      confirmButtonColor: "#dc2626",
+      reverseButtons: true,
+    });
+
+    if (!result.isConfirmed) return;
+
+    const { error } = await cancelReplenish(r.transfer_group_id);
+
+    if (error) {
+      Swal.fire({ ...swalBase, icon: "error", title: "ยกเลิกไม่สำเร็จ", text: error.message });
+      return;
+    }
+
+    Swal.fire({ ...swalBase, icon: "success", title: "ยกเลิกการเติมยาแล้ว", timer: 1500, showConfirmButton: false });
+    reload();
+  }
+
   return (
     <div className="rounded-2xl border-2 border-[#198754]/40 bg-white p-5 shadow-[0_2px_16px_-4px_rgba(15,23,42,0.08)] font-['Kanit'] relative">
       {/* ส่วนหัวข้อประวัติ */}
@@ -156,12 +196,18 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
 
                 {isReplenish ? (
                   /* แถวที่ 1 (โหมดเติมยาหน่วยงาน): แสดงทิศทางการเติม แทนข้อมูลผู้ป่วย */
-                  <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                  /* pr เผื่อพื้นที่ให้ปุ่ม "ยกเลิกการเติมยา" ที่ลอยอยู่มุมขวาบน ไม่ให้ทับข้อความ */
+                  <div className="flex flex-wrap items-center gap-1.5 pr-32 text-sm">
                     <ArrowRightLeft className="h-4 w-4 text-[#2f8fdc]" />
                     <span className="font-bold text-slate-800">{r.note || (isReplenishIn ? "รับเติมยา" : "เติมยาหน่วยงาน")}</span>
                     <span className="rounded-full bg-[#2f8fdc] px-2 py-0.5 text-[11px] font-bold text-white">
                       เติมยาหน่วยงาน
                     </span>
+                    {r.department_name && (
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                        🏥 {r.department_name}
+                      </span>
+                    )}
                   </div>
                 ) : (
                   /* แถวที่ 1: ชื่อผู้ป่วย และ HN */
@@ -217,8 +263,8 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
                 </div>
               </div>
 
-              {/* ปุ่ม Action ลบ/แก้ไขที่มุมขวาบน (โหมดเติมยาหน่วยงานยังแก้ไข/ลบจากการ์ดนี้ไม่ได้ เพราะกระทบสต็อก 2 หน่วยงานพร้อมกัน) */}
-              {!isReplenish && (
+              {/* ปุ่ม Action ที่มุมขวาบน */}
+              {!isReplenish ? (
                 <div className="absolute right-3 top-3 flex items-center gap-1.5">
                   <button
                     type="button"
@@ -235,6 +281,24 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
                     title="ลบ"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ) : (
+                // การเติมยา 1 ครั้ง = 2 แถว (ตัดออกจาก AVDC + รับเข้าปลายทาง) จับคู่กันด้วย transfer_group_id
+                // กดปุ่มนี้ครั้งเดียวจะลบทั้งคู่พร้อมกัน ไม่ต้องเดาจับคู่จากยา/ล็อต/เวลา
+                <div className="absolute right-3 top-3">
+                  <button
+                    type="button"
+                    onClick={() => handleCancelReplenish(r)}
+                    disabled={!r.transfer_group_id}
+                    className="flex items-center gap-1 rounded border border-red-300 px-1.5 py-1 text-[11px] font-semibold text-red-500 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+                    title={
+                      r.transfer_group_id
+                        ? "ยกเลิกการเติมยา (ลบทั้ง 2 ฝั่งพร้อมกัน คืนสต็อกทั้งต้นทาง-ปลายทาง)"
+                        : "รายการเก่าก่อนมีระบบยกเลิกอัตโนมัติ ไม่สามารถยกเลิกจากปุ่มนี้ได้"
+                    }
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" /> ยกเลิกการเติมยา
                   </button>
                 </div>
               )}
