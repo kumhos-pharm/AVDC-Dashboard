@@ -532,7 +532,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
         return;
       }
 
-      const destDeptName = departments.find((d) => d.id === destDepartmentId)?.name || "-";
+      const destDeptName = departments.find((d) => String(d.id) === String(destDepartmentId))?.name || "-";
 
       setLoading(true);
       try {
