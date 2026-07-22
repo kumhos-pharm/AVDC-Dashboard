@@ -35,13 +35,27 @@ function remainingQty(r) {
   return r.remaining_qty === null || r.remaining_qty === undefined ? null : r.remaining_qty;
 }
 
-// ดึงหน่วยนับที่ถูกต้องจาก "รูปแบบยา" (เช่น "ซอง (Powder)" -> "ซอง") แทนคอลัมน์ unit ของ drugs
-// เพราะ unit ไม่เคยถูกตั้งค่าจากหน้า UI ไหนเลย (ไม่มีช่องกรอก unit ในฟอร์มรับยา/แก้ไขยา) ทำให้ค่าเดิม
-// ในฐานข้อมูลเป็นค่า default ทั่วไปที่ไม่ตรงกับรูปแบบยาจริงของแต่ละรายการ (เช่น ยาผงในซอง แต่ unit ดันเป็น "ขวด")
+// ดึงหน่วยนับที่ถูกต้องจาก "รูปแบบยา" แทนคอลัมน์ unit ของ drugs เพราะ unit ไม่เคยถูกตั้งค่าจากหน้า UI ไหนเลย
+// (ไม่มีช่องกรอก unit ในฟอร์มรับยา/แก้ไขยา) ทำให้ค่าเดิมในฐานข้อมูลเป็นค่า default ทั่วไปที่ไม่ตรงกับรูปแบบยาจริง
+// หมายเหตุ: ใช้ตาราง mapping ตรง ๆ แทนการตัดคำหน้าวงเล็บ เพราะบางรูปแบบคำหน้าวงเล็บเป็น "ประเภทยา" ไม่ใช่หน่วยนับ
+// เช่น "ยาฉีด (Vial)" คำว่า "ยาฉีด" แปลว่ายาฉีดโดยรวม ไม่ใช่หน่วยนับ หน่วยนับจริงคือ "ขวด" (มาจาก Vial)
+const FORM_UNIT_MAP = {
+  "ยาฉีด (Ampoule)": "แอมพูล",
+  "ยาฉีด (Vial)": "ขวด",
+  "ซอง (Powder)": "ซอง",
+  "ขวด": "ขวด",
+};
+// เผื่อรูปแบบยาที่ยังไม่อยู่ใน FORM_UNIT_MAP (เช่นเพิ่มตัวเลือกใหม่ในอนาคต) ให้เดาจากคำในวงเล็บแทน
+const ENGLISH_FORM_GUESS = { powder: "ซอง", vial: "ขวด", ampoule: "แอมพูล", tablet: "เม็ด", capsule: "แคปซูล" };
 function unitFromForm(form) {
   if (!form) return null;
-  const idx = form.indexOf(" (");
-  return (idx > 0 ? form.slice(0, idx) : form).trim() || null;
+  if (FORM_UNIT_MAP[form]) return FORM_UNIT_MAP[form];
+  const match = form.match(/\(([^)]+)\)/);
+  if (match) {
+    const guess = ENGLISH_FORM_GUESS[match[1].trim().toLowerCase()];
+    return guess || null; // ไม่มีวงเล็บที่รู้จัก อย่าเดามั่ว ปล่อยให้ fallback ไป r.unit แทน
+  }
+  return form.trim() || null; // ไม่มีวงเล็บเลย (เช่น "ขวด" ตรง ๆ) ใช้ค่านั้นได้เลย
 }
 
 function displayUnit(r) {
