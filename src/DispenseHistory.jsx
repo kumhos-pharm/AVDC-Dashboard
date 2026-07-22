@@ -162,6 +162,39 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
     reload();
   }
 
+  // สำหรับรายการเติมยาเก่า (ก่อนมีระบบ transfer_group_id) ที่ปุ่ม "ยกเลิกการเติมยา" อัตโนมัติใช้ไม่ได้
+  // ให้ลบได้ทีละฝั่งแทน (ฝั่งนี้ฝั่งเดียว) สต็อกของฝั่งนี้จะถูกคืนกลับอัตโนมัติผ่าน trigger เหมือนกัน
+  // แต่ต้องเตือนผู้ใช้ให้ไปลบอีกฝั่ง (ต้นทาง/ปลายทาง) เองด้วย ถ้าต้องการยกเลิกให้ครบทั้งคู่
+  async function handleDeleteLegacyReplenish(r) {
+    const isReplenishIn = r.reason === "replenish_in";
+    const result = await Swal.fire({
+      ...swalBase,
+      icon: "warning",
+      title: "ลบรายการนี้ใช่ไหม?",
+      html: `<b>${r.drug_name || ""}</b> (Lot ${r.lot || "-"}) จำนวน ${Math.abs(r.change_qty)} ${displayUnit(r)}<br/>
+             รายการนี้บันทึกไว้ก่อนมีระบบยกเลิกอัตโนมัติ จึงลบได้แค่ฝั่งนี้ฝั่งเดียว<br/>
+             (${isReplenishIn ? "ฝั่งหน่วยงานปลายทาง" : "ฝั่ง AVDC ต้นทาง"}) สต็อกฝั่งนี้จะถูกคืนกลับอัตโนมัติ<br/>
+             <span class="text-amber-600 font-semibold">ถ้าต้องการยกเลิกให้ครบทั้งคู่ ต้องไปลบอีกฝั่งด้วยตนเองแยกต่างหาก</span>`,
+      showCancelButton: true,
+      confirmButtonText: "ลบฝั่งนี้",
+      cancelButtonText: "ปิด",
+      confirmButtonColor: "#dc2626",
+      reverseButtons: true,
+    });
+
+    if (!result.isConfirmed) return;
+
+    const { error } = await deleteDispense(r.id);
+
+    if (error) {
+      Swal.fire({ ...swalBase, icon: "error", title: "ลบไม่สำเร็จ", text: error.message });
+      return;
+    }
+
+    Swal.fire({ ...swalBase, icon: "success", title: "ลบรายการแล้ว", timer: 1500, showConfirmButton: false });
+    reload();
+  }
+
   return (
     <div className="rounded-2xl border-2 border-[#198754]/40 bg-white p-5 shadow-[0_2px_16px_-4px_rgba(15,23,42,0.08)] font-['Kanit'] relative">
       {/* ส่วนหัวข้อประวัติ */}
@@ -318,20 +351,26 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
               ) : (
                 // การเติมยา 1 ครั้ง = 2 แถว (ตัดออกจาก AVDC + รับเข้าปลายทาง) จับคู่กันด้วย transfer_group_id
                 // กดปุ่มนี้ครั้งเดียวจะลบทั้งคู่พร้อมกัน ไม่ต้องเดาจับคู่จากยา/ล็อต/เวลา
-                <div className="absolute right-3 top-3">
-                  <button
-                    type="button"
-                    onClick={() => handleCancelReplenish(r)}
-                    disabled={!r.transfer_group_id}
-                    className="flex items-center gap-1 rounded border border-red-300 px-1.5 py-1 text-[11px] font-semibold text-red-500 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-                    title={
-                      r.transfer_group_id
-                        ? "ยกเลิกการเติมยา (ลบทั้ง 2 ฝั่งพร้อมกัน คืนสต็อกทั้งต้นทาง-ปลายทาง)"
-                        : "รายการเก่าก่อนมีระบบยกเลิกอัตโนมัติ ไม่สามารถยกเลิกจากปุ่มนี้ได้"
-                    }
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" /> ยกเลิกการเติมยา
-                  </button>
+                <div className="absolute right-3 top-3 flex items-center gap-1.5">
+                  {r.transfer_group_id ? (
+                    <button
+                      type="button"
+                      onClick={() => handleCancelReplenish(r)}
+                      className="flex items-center gap-1 rounded border border-red-300 px-1.5 py-1 text-[11px] font-semibold text-red-500 hover:bg-red-50"
+                      title="ยกเลิกการเติมยา (ลบทั้ง 2 ฝั่งพร้อมกัน คืนสต็อกทั้งต้นทาง-ปลายทาง)"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" /> ยกเลิกการเติมยา
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteLegacyReplenish(r)}
+                      className="flex items-center gap-1 rounded border border-red-300 px-1.5 py-1 text-[11px] font-semibold text-red-500 hover:bg-red-50"
+                      title="รายการเก่าก่อนมีระบบยกเลิกอัตโนมัติ — ลบได้แค่ฝั่งนี้ฝั่งเดียว (ต้องไปลบอีกฝั่งเองถ้าต้องการยกเลิกให้ครบ)"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> ลบรายการนี้
+                    </button>
+                  )}
                 </div>
               )}
 
