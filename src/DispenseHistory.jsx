@@ -273,6 +273,7 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
                       {isReplenishIn ? "+" : ""}{Math.abs(r.change_qty)}
                     </span>{" "}
                     <span className="text-slate-500">{displayUnit(r)}</span>
+                  </span>
                   {!isReplenish && (
                     <span>
                       คงเหลือ:{" "}
