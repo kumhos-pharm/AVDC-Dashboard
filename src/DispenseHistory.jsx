@@ -35,6 +35,19 @@ function remainingQty(r) {
   return r.remaining_qty === null || r.remaining_qty === undefined ? null : r.remaining_qty;
 }
 
+// ดึงหน่วยนับที่ถูกต้องจาก "รูปแบบยา" (เช่น "ซอง (Powder)" -> "ซอง") แทนคอลัมน์ unit ของ drugs
+// เพราะ unit ไม่เคยถูกตั้งค่าจากหน้า UI ไหนเลย (ไม่มีช่องกรอก unit ในฟอร์มรับยา/แก้ไขยา) ทำให้ค่าเดิม
+// ในฐานข้อมูลเป็นค่า default ทั่วไปที่ไม่ตรงกับรูปแบบยาจริงของแต่ละรายการ (เช่น ยาผงในซอง แต่ unit ดันเป็น "ขวด")
+function unitFromForm(form) {
+  if (!form) return null;
+  const idx = form.indexOf(" (");
+  return (idx > 0 ? form.slice(0, idx) : form).trim() || null;
+}
+
+function displayUnit(r) {
+  return unitFromForm(r.drug_form) || r.unit || "หน่วย";
+}
+
 const ITEMS_PER_PAGE = 5;
 
 // ตั้งค่าธีมสีของ SweetAlert ให้เข้ากับฟอนต์/โทนสีของระบบ
@@ -112,7 +125,7 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
       ...swalBase,
       icon: "warning",
       title: "ยกเลิกการเติมยานี้ใช่ไหม?",
-      html: `<b>${r.drug_name || ""}</b> (Lot ${r.lot || "-"}) จำนวน ${Math.abs(r.change_qty)} ${r.unit || "Vial"}<br/>
+      html: `<b>${r.drug_name || ""}</b> (Lot ${r.lot || "-"}) จำนวน ${Math.abs(r.change_qty)} ${displayUnit(r)}<br/>
              ${isReplenishIn ? "จะถูกดึงคืน" : "จะถูกยกเลิก"} ทั้ง 2 ฝั่ง (ต้นทาง AVDC และปลายทาง) พร้อมกัน<br/>
              ยอดสต็อกทั้ง 2 หน่วยงานจะถูกคืนกลับอัตโนมัติ`,
       showCancelButton: true,
@@ -245,15 +258,14 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
                     <span className={`font-bold ${isReplenishIn ? "text-emerald-600" : "text-red-600"}`}>
                       {isReplenishIn ? "+" : ""}{Math.abs(r.change_qty)}
                     </span>{" "}
-                    <span className="text-slate-500">{r.unit || "Vial"}</span>
-                  </span>
+                    <span className="text-slate-500">{displayUnit(r)}</span>
                   {!isReplenish && (
                     <span>
                       คงเหลือ:{" "}
                       <span className="font-bold text-emerald-600">
                         {remainingQty(r) !== null ? remainingQty(r) : "-"}
                       </span>{" "}
-                      <span className="text-slate-500">{r.unit || "Vial"}</span>
+                      <span className="text-slate-500">{displayUnit(r)}</span>
                     </span>
                   )}
                   <span className="ml-auto text-[12px] font-bold bg-red-50 text-red-600 px-2 py-0.5 rounded border border-red-100">
