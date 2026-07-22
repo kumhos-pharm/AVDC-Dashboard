@@ -707,7 +707,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
   };
 
   return (
-    <div className="rounded-2xl border-2 border-[#007bff]/40 bg-white p-6 md:p-7 shadow-[0_2px_16px_-4px_rgba(15,23,42,0.08)] font-['Kanit'] w-full max-w-xl mx-auto relative min-h-[700px] flex flex-col justify-between">
+    <div className="rounded-2xl border-2 border-[#007bff]/40 bg-white p-4 sm:p-6 md:p-7 shadow-[0_2px_16px_-4px_rgba(15,23,42,0.08)] font-['Kanit'] w-full max-w-xl mx-auto relative md:min-h-[700px] flex flex-col justify-between">
       
       <form onSubmit={handleSubmit} className="space-y-4 flex-grow">
         
@@ -813,8 +813,8 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
 
         {/* แถวที่ 1: คำนำหน้า, ชื่อ-นามสกุล, HN (เฉพาะโหมดจ่ายยาให้ผู้ป่วยเท่านั้น) */}
         {mode === "dispense" && (
-        <div className="grid grid-cols-12 gap-3">
-          <div className="col-span-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-12">
+          <div className="sm:col-span-3">
             <label className="block text-sm font-bold text-slate-800 mb-1">คำนำหน้า</label>
             <select 
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-[#007bff] focus:outline-none focus:ring-2 focus:ring-[#007bff] h-11"
@@ -828,7 +828,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
               <option value="พระ">พระ</option>
             </select>
           </div>
-          <div className="col-span-5">
+          <div className="sm:col-span-5">
             <label className="block text-sm font-bold text-slate-800 mb-1">ชื่อ-นามสกุล ผู้ป่วย</label>
             <input 
               type="text" 
@@ -838,7 +838,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
               onChange={(e) => setFormData({...formData, patientName: e.target.value})}
             />
           </div>
-          <div className="col-span-4">
+          <div className="sm:col-span-4">
             <label className="block text-sm font-bold text-slate-800 mb-1">HN</label>
             <input 
               type="text" 
@@ -852,7 +852,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
         )}
 
         {/* แถวที่ 2: วันที่จ่าย, เวลา */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4">
           <div>
             <label className="block text-sm font-bold text-slate-800 mb-1">วันที่จ่าย</label>
             <input 
@@ -963,7 +963,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
         </div>
 
         {/* แถวที่ 5: ความแรง, รูปแบบยา */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4">
           <div>
             <label className="block text-sm font-bold text-slate-800 mb-1">ความแรง</label>
             <input 
@@ -985,7 +985,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
         </div>
 
         {/* แถวที่ 6: Lot Number และ จำนวนที่จ่าย */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4">
           <div>
             <label className="block text-sm font-bold text-slate-800 mb-1">Lot Number</label>
             <input 
@@ -1016,7 +1016,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
         </div>
 
         {/* แถวที่ 7: วันผลิต, วันหมดอายุ */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4">
           <div>
             <label className="block text-sm font-bold text-slate-800 mb-1">วันผลิต</label>
             <input 

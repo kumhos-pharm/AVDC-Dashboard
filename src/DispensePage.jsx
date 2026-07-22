@@ -63,7 +63,7 @@ export default function DispensePage() {
           {/* ฝั่งซ้าย: โลโก้ใหม่ + ชื่อระบบตามสั่ง */}
           <div className="flex items-center gap-4 pl-1">
             {/* กล่องใส่โลโก้ AVDC */}
-            <div className="h-38 w-38 flex-shrink-0 bg-white p-1 rounded-xl border border-slate-100 shadow-sm">
+            <div className="h-14 w-14 sm:h-20 sm:w-20 md:h-38 md:w-38 flex-shrink-0 bg-white p-1 rounded-xl border border-slate-100 shadow-sm">
           
   <img
   src={avdcLogo}

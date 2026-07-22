@@ -196,9 +196,9 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
   }
 
   return (
-    <div className="rounded-2xl border-2 border-[#198754]/40 bg-white p-5 shadow-[0_2px_16px_-4px_rgba(15,23,42,0.08)] font-['Kanit'] relative">
+    <div className="rounded-2xl border-2 border-[#198754]/40 bg-white p-4 sm:p-5 shadow-[0_2px_16px_-4px_rgba(15,23,42,0.08)] font-['Kanit'] relative">
       {/* ส่วนหัวข้อประวัติ */}
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 text-lg font-bold text-[#198754]">
           <History className="h-5 w-5" /> ประวัติบันทึกล่าสุด
         </h2>
@@ -230,7 +230,7 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
           return (
             <div
               key={r.id}
-              className={`relative flex gap-4 rounded-xl border p-4 shadow-sm transition-all ${
+              className={`relative flex flex-col gap-3 rounded-xl border p-4 shadow-sm transition-all sm:flex-row sm:gap-4 ${
                 editingId === r.id
                   ? "border-amber-400 bg-amber-50/50 ring-1 ring-amber-300"
                   : isReplenish
@@ -239,20 +239,19 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
               }`}
             >
               
-              {/* ด้านซ้าย: วันที่และเวลาที่บันทึก */}
-              <div className={`flex flex-col items-center justify-start border-r pr-4 min-w-[90px] text-center ${isReplenish ? "border-blue-100" : "border-slate-200"}`}>
+              {/* ด้านซ้าย: วันที่และเวลาที่บันทึก (แถวแนวนอนบนมือถือ, คอลัมน์ซ้ายบนจอกว้าง) */}
+              <div className={`flex flex-row items-center justify-start gap-2 border-b pb-2 text-left sm:flex-col sm:justify-start sm:border-b-0 sm:border-r sm:pb-0 sm:pr-4 sm:min-w-[90px] sm:text-center ${isReplenish ? "border-blue-100" : "border-slate-200"}`}>
                 <span className={`flex items-center gap-1.5 text-sm font-bold ${isReplenish ? "text-[#2f8fdc]" : "text-[#198754]"}`}>
                   <span className={`h-2 w-2 rounded-full ${isReplenish ? "bg-[#2f8fdc]" : "bg-[#198754]"}`} />
-                  {date.split(' ')[0]} {date.split(' ')[1]}
+                  {date.split(' ')[0]} {date.split(' ')[1]} {date.split(' ')[2]}
                 </span>
-                <span className={`text-sm font-bold ${isReplenish ? "text-[#2f8fdc]" : "text-[#198754]"}`}>{date.split(' ')[2]}</span>
-                <span className="mt-1 text-[12px] text-slate-500 flex items-center gap-1 justify-center">
+                <span className="text-[12px] text-slate-500 flex items-center gap-1 justify-center sm:mt-1">
                   🕒 {time}
                 </span>
               </div>
 
               {/* ด้านขวา: ข้อมูลการจ่ายยา / เติมยาหน่วยงาน */}
-              <div className="flex-1 space-y-1.5">
+              <div className="flex-1 min-w-0 space-y-1.5">
 
                 {isReplenish ? (
                   /* แถวที่ 1 (โหมดเติมยาหน่วยงาน): แสดงทิศทางการเติม แทนข้อมูลผู้ป่วย */
@@ -271,7 +270,7 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
                   </div>
                 ) : (
                   /* แถวที่ 1: ชื่อผู้ป่วย และ HN */
-                  <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                  <div className="flex flex-wrap items-center gap-1.5 pr-16 text-sm">
                     <User className="h-4 w-4 text-slate-500" />
                     <span className="font-bold text-slate-800">
                       {r.patient_prefix}{r.patient_name || "-"}
@@ -381,13 +380,13 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
 
       {/* ส่วน Pagination */}
       {!loading && rows.length > 0 && (
-        <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-sm text-slate-500">
-          <span>
+        <div className="mt-4 flex flex-col gap-2 border-t border-slate-100 pt-3 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+          <span className="text-center sm:text-left">
             แสดงหน้า <span className="font-bold text-slate-700">{currentPage}</span> จากทั้งหมด{" "}
             <span className="font-bold text-slate-700">{totalPages}</span> หน้า
           </span>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-center gap-2 sm:justify-start">
             <button
               type="button"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
