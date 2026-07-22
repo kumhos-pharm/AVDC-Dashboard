@@ -18,6 +18,25 @@ function ScrollToTop() {
   return null;
 }
 
+// ชื่อที่จะไปแสดงบนแท็บเบราว์เซอร์ (document.title) ของแต่ละหน้า
+const PAGE_TITLES = {
+  "/": "AVDC — ระบบ Antidote & Vital Drug",
+  "/dispense": "ระบบบันทึกจ่ายยา Antidote & Vital Drug",
+  "/admin/dashboard": "AVDC DASHBOARD",
+  "/admin/warehouse": "คลังยา | AVDC",
+  "/admin/drugs": "รายการยา | AVDC",
+  "/admin/staff": "เจ้าหน้าที่ | AVDC",
+  "/admin/departments": "หน่วยงาน | AVDC",
+};
+
+function PageTitle() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    document.title = PAGE_TITLES[pathname] || "AVDC — ระบบ Antidote & Vital Drug";
+  }, [pathname]);
+  return null;
+}
+
 function AdminShell({ children }) {
   return (
     <div className="min-h-screen w-full bg-[#eef1f6]">
@@ -51,6 +70,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <ScrollToTop />
+      <PageTitle />
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/dispense" element={<DispensePage />} />
