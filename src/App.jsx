@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Link, useLocation } from "react-router-dom";
-import { PenSquare, LayoutDashboard, ShieldCheck } from "lucide-react";
+import { PenSquare, LayoutDashboard } from "lucide-react";
+import avdcLogo from "./assets/avdc-logo.png";
 import DispensePage from "./DispensePage";
 import AVDCDashboard from "./AVDCDashboard";
 import WarehousePage from "./WarehousePage";
@@ -29,9 +30,7 @@ function AdminShell({ children }) {
 function Landing() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-[#eef1f6] p-6 text-center">
-      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#0d2a63]">
-        <ShieldCheck className="h-8 w-8 text-white" />
-      </div>
+      <img src={avdcLogo} alt="AVDC Logo" className="h-24 w-24 rounded-2xl object-contain" />
       <h1 className="text-xl font-bold text-[#0d2a63]">AVDC — ระบบ Antidote &amp; Vital Drug</h1>
       <div className="flex flex-col gap-3 sm:flex-row">
         <Link to="/dispense" className="flex items-center gap-2 rounded-xl bg-[#2f8fdc] px-6 py-3 font-semibold text-white shadow-sm hover:bg-[#2a7ec2]">
