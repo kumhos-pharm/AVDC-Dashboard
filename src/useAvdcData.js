@@ -55,6 +55,20 @@ export function useAvdcData() {
     });
 
     const pivoted = order.map((name) => ({ name, byDept: byDrugMap[name] }));
+
+    // ถ้าหน่วยงานไหนไม่ได้ตั้ง Min/Max ของยาตัวนั้นไว้เอง ให้ใช้ค่า Min/Max ที่ตั้งไว้ที่ "คลังยา"
+    // (ค่ากลางของยาตัวนั้น) เป็นค่า default แทน ไม่ต้องให้แต่ละหน่วยงานตั้งซ้ำทุกที่
+    const WAREHOUSE_DEPT_NAME = "คลังยา";
+    pivoted.forEach((drug) => {
+      const warehouseCell = drug.byDept[WAREHOUSE_DEPT_NAME];
+      if (!warehouseCell) return;
+      Object.entries(drug.byDept).forEach(([deptName, cell]) => {
+        if (deptName === WAREHOUSE_DEPT_NAME || !cell) return;
+        if (cell.min == null) cell.min = warehouseCell.min;
+        if (cell.max == null) cell.max = warehouseCell.max;
+      });
+    });
+
     const total = gridRows.reduce((sum, r) => sum + (r.quantity || 0), 0);
 
     // ยาใกล้หมดอายุ: เหลืออายุระหว่าง 0-90 วันเท่านั้น (ไม่รวมที่หมดอายุไปแล้ว) และต้องมีคงเหลือ > 0
