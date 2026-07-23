@@ -301,7 +301,7 @@ export default function AVDCDashboard() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-[#eef1f6] font-['Kanit'] text-slate-800 avdc-crisp-text">
+    <div className="min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-[#eef1f6] font-['Kanit'] text-slate-800 avdc-crisp-text">
       <style>{`
         .avdc-crisp-text, .avdc-crisp-text * {
           -webkit-font-smoothing: subpixel-antialiased;
@@ -323,15 +323,15 @@ export default function AVDCDashboard() {
             
             {/* โลโก้, ชื่อศูนย์ และ แถบอัปเดตล่าสุด */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3 md:gap-4">
+              <div className="flex items-center gap-3 md:gap-4 min-w-0">
                 <div className="shrink-0">
-                  <img src={avdcLogo} alt="AVDC Logo" className="h-20 w-20 md:h-24 md:w-24 object-contain" />
+                  <img src={avdcLogo} alt="AVDC Logo" className="h-12 w-12 sm:h-20 sm:w-20 md:h-24 md:w-24 object-contain" />
                 </div>
                 <div className="min-w-0">
-                  <h1 className="text-3xl md:text-4xl font-black tracking-tight" style={{ color: NAVY }}>
+                  <h1 className="text-xl sm:text-3xl md:text-4xl font-black tracking-tight truncate" style={{ color: NAVY }}>
                     AVDC DASHBOARD
                   </h1>
-                  <p className="text-lg md:text-xl font-bold leading-normal truncate">
+                  <p className="text-sm sm:text-lg md:text-xl font-bold leading-normal truncate">
                     <span className="text-[#16a34a]">Antidote</span> &amp; <span className="text-[#dc2626]">Vital Drug</span>{" "}
                     <span className="text-slate-700">Center</span>
                   </p>
@@ -431,6 +431,9 @@ export default function AVDCDashboard() {
                 </div>
               </div>
 
+              <p className="mb-2 flex items-center gap-1 text-xs font-semibold text-slate-400 sm:hidden">
+                <span>👉</span> เลื่อนซ้าย-ขวาเพื่อดูข้อมูลหน่วยงานอื่น
+              </p>
               <div className="overflow-x-auto rounded-xl">
                 <table className="w-full min-w-[1180px] border-collapse text-sm">
                   <thead>
@@ -516,6 +519,9 @@ export default function AVDCDashboard() {
                   <BarChart3 className="h-4 w-4 shrink-0" style={{ color: NAVY }} />
                   <span className="truncate">สถานะคงคลัง (ศูนย์ AVDC และ คลังยา)</span>
                 </h2>
+                <p className="mb-2 flex items-center gap-1 text-xs font-semibold text-slate-400 sm:hidden">
+                  <span>👉</span> เลื่อนซ้าย-ขวาเพื่อดูข้อมูลเพิ่มเติม
+                </p>
                 <div className="overflow-x-auto rounded-xl">
                   <table className="w-full min-w-[560px] border-collapse text-sm">
                     <thead>
