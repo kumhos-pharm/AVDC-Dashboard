@@ -616,6 +616,26 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
         ]);
         if (inError) throw inError;
 
+        // 5. แดชบอร์ด (v_dashboard_grid) จะแสดงยาของหน่วยงานหนึ่ง ๆ ได้ก็ต่อเมื่อมีแถว drug_targets
+        // (department_id, drug_id) อยู่แล้วเท่านั้น — ถ้าหน่วยงานปลายทางไม่เคยมียานี้ในรายการเป้าหมายมาก่อน
+        // การเติมยาจะบันทึกสำเร็จ แต่ตัวเลขจะไม่ขึ้นในตาราง "ยาที่มีในหน่วยงาน" ของแดชบอร์ดเลย
+        // จึงต้องสร้างแถวเปล่าให้อัตโนมัติเหมือนที่ทำไว้แล้วในโหมดจ่ายยา (useDispense.js) และรับยาเข้าคลัง (useWarehouse.js)
+        const { data: existingTarget } = await supabase
+          .from("drug_targets")
+          .select("id")
+          .eq("department_id", destDepartmentId)
+          .eq("drug_id", formData.drugId)
+          .maybeSingle();
+
+        if (!existingTarget) {
+          await supabase.from("drug_targets").insert({
+            department_id: destDepartmentId,
+            drug_id: formData.drugId,
+            min_qty: null,
+            max_qty: null,
+          });
+        }
+
         Swal.fire({
           ...swalBase,
           icon: "success",
