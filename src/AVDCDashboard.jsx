@@ -886,17 +886,28 @@ export default function AVDCDashboard() {
         open={!!cellDetail}
         onClose={() => setCellDetail(null)}
         title={cellDetail?.drugName}
-        subtitle={cellDetail?.deptName}
+        subtitle={
+          cellDetail?.deptName ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-[#e8f1fd] px-2 py-0.5 text-xs font-bold text-[#007bff]">
+              <Building2 className="h-3 w-3" /> {cellDetail.deptName}
+            </span>
+          ) : null
+        }
         icon={<Syringe className="h-8 w-8 shrink-0 text-[#20509e]" />}
       >
         {cellDetail && (() => {
           const { cell, drugName, deptName, deptId } = cellDetail;
           const lots = lotsByDrugDept[`${drugName}||${deptName}`] || [];
+          const status = statusOf(cell);
+          const s = STATUS[status];
           return (
             <div className="space-y-3">
-              <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5">
-                <span className="text-sm font-semibold text-slate-500">Min {cell?.min ?? "-"} / Max {cell?.max ?? "-"}</span>
-                <span className="text-lg font-black text-slate-800">{cell?.quantity ?? 0} หน่วย</span>
+              <div className={`flex items-center justify-between rounded-xl px-3 py-2.5 ${s.badgeBg}`}>
+                <div className="flex flex-col gap-1">
+                  <span className={`text-sm font-semibold ${s.badgeText}`}>Min {cell?.min ?? "-"} / Max {cell?.max ?? "-"}</span>
+                  <StatusBadge status={status} />
+                </div>
+                <span className={`text-lg font-black ${s.badgeText}`}>{cell?.quantity ?? 0} หน่วย</span>
               </div>
               <div className="space-y-1.5">
                 {lots.length > 1 && (
@@ -909,7 +920,7 @@ export default function AVDCDashboard() {
                       <span className="truncate font-semibold text-slate-700">Lot {lot.lot || "-"}</span>
                       <span className="flex shrink-0 items-center gap-2">
                         <span className="text-slate-400">หมดอายุ {lot.expDate ? formatThaiDateTime(lot.expDate).split("\n")[0] : "-"}</span>
-                        <span className={`rounded-full px-2.5 py-1 text-sm font-bold ${expired ? "bg-red-100 text-red-600" : "bg-slate-100 text-slate-600"}`}>
+                        <span className={`rounded-full px-2.5 py-1 text-sm font-bold ${expired ? "bg-red-100 text-red-600" : "bg-[#eaf7ef] text-[#16a34a]"}`}>
                           {lot.quantity?.toLocaleString?.() ?? lot.quantity} หน่วย
                         </span>
                       </span>
@@ -923,7 +934,7 @@ export default function AVDCDashboard() {
                   setCellDetail(null);
                   goToWarehouse({ drugName, departmentId: deptId });
                 }}
-                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-50"
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#007bff] py-2.5 text-sm font-bold text-white hover:bg-[#0062cc]"
               >
                 <ExternalLink className="h-3.5 w-3.5" /> ไปหน้าคลังยาเพื่อจัดการ
               </button>
