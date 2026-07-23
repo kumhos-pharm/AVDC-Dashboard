@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Warehouse, Search, PackagePlus, Send, Loader2, Pencil, Trash2, X, AlertTriangle, SquarePen, Undo2 } from "lucide-react";
+import { Warehouse, Search, PackagePlus, Send, Loader2, Pencil, Trash2, X, XCircle, AlertTriangle, SquarePen, Undo2 } from "lucide-react";
 import { useDrugsAndDepartments } from "./useDispense";
 import { useWarehouseLots, receiveStock, transferStock, removeStockLot, updateLotDetails, updateMinMax, useWarehouseMinMax, returnLotToWarehouse } from "./useWarehouse";
 import { findOrCreateDrug, updateDrug } from "./useDrugs";
@@ -361,9 +361,9 @@ function ReceiveForm({ drugs, warehouseDeptId, onReceived, editTarget, minMaxByN
               resetForm();
               onCancelEdit?.();
             }}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-500"
+            className="flex items-center gap-1.5 rounded-xl border border-red-100 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-500 transition hover:border-red-200 hover:bg-red-100"
           >
-            <X className="h-4 w-4" /> ยกเลิกการแก้ไข
+            <XCircle className="h-4 w-4" /> ยกเลิกการแก้ไข
           </button>
         </div>
       )}
@@ -558,9 +558,9 @@ function LotRow({ lot, departments, minMax, onDone, onEdit, editingKey }) {
               <button
                 type="button"
                 onClick={() => setMode(null)}
-                className="flex items-center gap-1.5 rounded-lg bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-500 transition hover:bg-slate-200"
+                className="flex items-center gap-1.5 rounded-lg bg-red-50 px-4 py-2 text-xs font-semibold text-red-500 transition hover:bg-red-100"
               >
-                <X className="h-3.5 w-3.5" /> ยกเลิก
+                <XCircle className="h-3.5 w-3.5" /> ยกเลิก
               </button>
             </div>
             {error && <p className="mt-2 text-xs font-medium text-red-500">{error}</p>}
