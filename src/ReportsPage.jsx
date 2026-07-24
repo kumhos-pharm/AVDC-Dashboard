@@ -60,7 +60,7 @@ const REPORT_TYPES = [
 ];
 
 export default function ReportsPage() {
-  const { loading, departments, drugRows, expiringLots } = useAvdcData();
+  const { loading, departments, drugRows, expiringLots, lotsByDrugDept } = useAvdcData();
   const [reportType, setReportType] = useState("stock");
   const [filterDept, setFilterDept] = useState("all");
   const [preparedBy, setPreparedBy] = useState("");
@@ -72,8 +72,17 @@ export default function ReportsPage() {
       Object.entries(d.byDept).forEach(([deptName, cell]) => {
         if (filterDept !== "all" && deptName !== filterDept) return;
         if (!cell || !cell.quantity) return;
+        // ดึงรายการ Lot ของยาตัวนี้ในหน่วยงานนี้ (เรียงตามวันหมดอายุใกล้สุดก่อน)
+        const lots = lotsByDrugDept[`${d.name}||${deptName}`] || [];
+        const lotText = lots.length ? lots.map((l) => l.lot || "-").join(", ") : "-";
+        const expText = lots.length
+          ? thaiDateShort(lots[0].expDate) + (lots.length > 1 ? ` (+${lots.length - 1} ล็อต)` : "")
+          : "-";
         rows.push({
           drugName: d.name,
+          strength: d.strength || "-",
+          lot: lotText,
+          expDate: expText,
           deptName,
           quantity: cell.quantity,
           min: cell.min ?? "-",
@@ -83,7 +92,7 @@ export default function ReportsPage() {
       });
     });
     return rows.sort((a, b) => a.drugName.localeCompare(b.drugName, "th") || a.deptName.localeCompare(b.deptName, "th"));
-  }, [drugRows, filterDept]);
+  }, [drugRows, filterDept, lotsByDrugDept]);
 
   // ---------- รายงาน 2: ยาที่ต้องติดตาม (Min/Max) ----------
   const watchRows = useMemo(() => {
@@ -93,8 +102,17 @@ export default function ReportsPage() {
         if (filterDept !== "all" && deptName !== filterDept) return;
         const status = statusOf(cell);
         if (status === "ok" || status === "none") return;
+        // ดึงรายการ Lot ของยาตัวนี้ในหน่วยงานนี้ (เรียงตามวันหมดอายุใกล้สุดก่อน)
+        const lots = lotsByDrugDept[`${d.name}||${deptName}`] || [];
+        const lotText = lots.length ? lots.map((l) => l.lot || "-").join(", ") : "-";
+        const expText = lots.length
+          ? thaiDateShort(lots[0].expDate) + (lots.length > 1 ? ` (+${lots.length - 1} ล็อต)` : "")
+          : "-";
         rows.push({
           drugName: d.name,
+          strength: d.strength || "-",
+          lot: lotText,
+          expDate: expText,
           deptName,
           quantity: cell?.quantity ?? 0,
           min: cell?.min ?? "-",
@@ -106,13 +124,14 @@ export default function ReportsPage() {
     });
     const order = { low: 0, near: 1, over: 2 };
     return rows.sort((a, b) => order[a.statusKey] - order[b.statusKey] || a.drugName.localeCompare(b.drugName, "th"));
-  }, [drugRows, filterDept]);
+  }, [drugRows, filterDept, lotsByDrugDept]);
 
   // ---------- รายงาน 3: ยาใกล้หมดอายุ ----------
   const expiringRows = useMemo(() => {
     const rows = filterDept === "all" ? expiringLots : expiringLots.filter((l) => l.departmentName === filterDept);
     return rows.map((l) => ({
       drugName: l.drugName,
+      strength: l.strength || "-",
       deptName: l.departmentName,
       lot: l.lot || "-",
       quantity: l.quantity,
@@ -128,6 +147,9 @@ export default function ReportsPage() {
     reportType === "stock"
       ? [
           { key: "drugName", label: "ชื่อยา" },
+          { key: "strength", label: "ความแรง" },
+          { key: "lot", label: "Lot" },
+          { key: "expDate", label: "วันหมดอายุ" },
           { key: "deptName", label: "หน่วยงาน" },
           { key: "quantity", label: "คงเหลือ", align: "right" },
           { key: "min", label: "Min", align: "right" },
@@ -137,6 +159,9 @@ export default function ReportsPage() {
       : reportType === "watch"
       ? [
           { key: "drugName", label: "ชื่อยา" },
+          { key: "strength", label: "ความแรง" },
+          { key: "lot", label: "Lot" },
+          { key: "expDate", label: "วันหมดอายุ" },
           { key: "deptName", label: "หน่วยงาน" },
           { key: "quantity", label: "คงเหลือ", align: "right" },
           { key: "min", label: "Min", align: "right" },
@@ -145,10 +170,11 @@ export default function ReportsPage() {
         ]
       : [
           { key: "drugName", label: "ชื่อยา" },
-          { key: "deptName", label: "หน่วยงาน" },
+          { key: "strength", label: "ความแรง" },
           { key: "lot", label: "Lot" },
-          { key: "quantity", label: "คงเหลือ", align: "right" },
           { key: "expDate", label: "วันหมดอายุ" },
+          { key: "deptName", label: "หน่วยงาน" },
+          { key: "quantity", label: "คงเหลือ", align: "right" },
           { key: "daysLeft", label: "เหลืออีก (วัน)", align: "right" },
         ];
 

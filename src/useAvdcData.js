@@ -25,7 +25,7 @@ export function useAvdcData() {
       supabase.from("v_dashboard_grid").select("*"),
       supabase.from("drugs").select("*", { count: "exact", head: true }),
       supabase.from("v_last_updated").select("last_updated").single(),
-      supabase.from("v_warehouse_lots").select("drug_name, lot, exp_date, quantity, department_id"),
+      supabase.from("v_warehouse_lots").select("drug_name, strength, lot, exp_date, quantity, department_id"),
     ]);
 
     const firstError = deptRes.error || gridRes.error || drugCountRes.error || lastUpdatedRes.error || lotsRes.error;
@@ -54,7 +54,13 @@ export function useAvdcData() {
       };
     });
 
-    const pivoted = order.map((name) => ({ name, byDept: byDrugMap[name] }));
+    // เก็บ "ความแรง" ของยาแต่ละตัวจากข้อมูล lot (มาจากตาราง drugs ผ่าน view v_warehouse_lots)
+    const strengthByDrug = {};
+    (lotsRes.data ?? []).forEach((l) => {
+      if (l.strength && !strengthByDrug[l.drug_name]) strengthByDrug[l.drug_name] = l.strength;
+    });
+
+    const pivoted = order.map((name) => ({ name, strength: strengthByDrug[name] || null, byDept: byDrugMap[name] }));
 
     // ถ้าหน่วยงานไหนไม่ได้ตั้ง Min/Max ของยาตัวนั้นไว้เอง ให้ใช้ค่า Min/Max ที่ตั้งไว้ที่ "คลังยา"
     // (ค่ากลางของยาตัวนั้น) เป็นค่า default แทน ไม่ต้องให้แต่ละหน่วยงานตั้งซ้ำทุกที่
@@ -86,6 +92,7 @@ export function useAvdcData() {
       })
       .map((l) => ({
         drugName: l.drug_name,
+        strength: l.strength || null,
         lot: l.lot,
         expDate: l.exp_date,
         quantity: l.quantity,
