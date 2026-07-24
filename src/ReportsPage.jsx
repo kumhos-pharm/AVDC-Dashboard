@@ -81,6 +81,7 @@ export default function ReportsPage() {
         rows.push({
           drugName: d.name,
           strength: d.strength || "-",
+          form: d.form || "-",
           lot: lotText,
           expDate: expText,
           deptName,
@@ -111,6 +112,7 @@ export default function ReportsPage() {
         rows.push({
           drugName: d.name,
           strength: d.strength || "-",
+          form: d.form || "-",
           lot: lotText,
           expDate: expText,
           deptName,
@@ -132,6 +134,7 @@ export default function ReportsPage() {
     return rows.map((l) => ({
       drugName: l.drugName,
       strength: l.strength || "-",
+      form: l.form || "-",
       deptName: l.departmentName,
       lot: l.lot || "-",
       quantity: l.quantity,
@@ -148,6 +151,7 @@ export default function ReportsPage() {
       ? [
           { key: "drugName", label: "ชื่อยา" },
           { key: "strength", label: "ความแรง" },
+          { key: "form", label: "รูปแบบยา" },
           { key: "lot", label: "Lot" },
           { key: "expDate", label: "วันหมดอายุ" },
           { key: "deptName", label: "หน่วยงาน" },
@@ -160,6 +164,7 @@ export default function ReportsPage() {
       ? [
           { key: "drugName", label: "ชื่อยา" },
           { key: "strength", label: "ความแรง" },
+          { key: "form", label: "รูปแบบยา" },
           { key: "lot", label: "Lot" },
           { key: "expDate", label: "วันหมดอายุ" },
           { key: "deptName", label: "หน่วยงาน" },
@@ -171,6 +176,7 @@ export default function ReportsPage() {
       : [
           { key: "drugName", label: "ชื่อยา" },
           { key: "strength", label: "ความแรง" },
+          { key: "form", label: "รูปแบบยา" },
           { key: "lot", label: "Lot" },
           { key: "expDate", label: "วันหมดอายุ" },
           { key: "deptName", label: "หน่วยงาน" },
