@@ -264,6 +264,7 @@ export default function AVDCDashboard() {
           items.push({
             drugName: d.name,
             deptName,
+            deptId: departments.find((dep) => dep.name === deptName)?.id ?? null,
             status,
             quantity: cell?.quantity ?? null,
             min: cell?.min ?? null,
@@ -274,7 +275,7 @@ export default function AVDCDashboard() {
       });
     });
     return items;
-  }, [drugRows, lotsByDrugDept]);
+  }, [drugRows, lotsByDrugDept, departments]);
 
   const watchCounts = {
     low: watchlist.filter((w) => w.status === "low").length,
@@ -850,39 +851,62 @@ export default function AVDCDashboard() {
           )
         }
       >
-        <div className="space-y-1.5">
+        <div className="space-y-2.5">
           {watchlist
             .filter((w) => w.status === watchStatus)
-            .map((w, idx) => (
-              <div key={`${w.drugName}-${w.deptName}-${idx}`} className="rounded-xl border border-slate-100 px-3 py-2 text-sm">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="flex min-w-0 items-center gap-2 font-semibold text-slate-700">
+            .map((w, idx) => {
+              const s = STATUS[w.status];
+              return (
+                <div key={`${w.drugName}-${w.deptName}-${idx}`} className="rounded-xl border border-slate-100 p-3 text-sm">
+                  <div className="flex items-center gap-2 font-semibold text-slate-700">
                     <Syringe className="h-3.5 w-3.5 shrink-0 text-[#20509e]" />
                     <span className="min-w-0">
                       <span className="block truncate">{w.drugName}</span>
-                      <span className="block text-sm font-normal text-slate-400">{w.deptName}</span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-[#e8f1fd] px-2 py-0.5 text-xs font-bold text-[#007bff] mt-0.5">
+                        <Building2 className="h-3 w-3" /> {w.deptName}
+                      </span>
                     </span>
-                  </span>
-                  <span className="flex shrink-0 flex-col items-end gap-0.5">
-                    <span className="font-black text-slate-800">{w.quantity ?? "-"} หน่วย</span>
-                    <span className="text-sm text-slate-400">Min {w.min ?? "-"} / Max {w.max ?? "-"}</span>
-                  </span>
-                </div>
-                {w.lots.length > 0 && (
-                  <div className="mt-2 space-y-1 border-t border-dashed border-slate-100 pt-2">
-                    {w.lots.map((lot, li) => (
-                      <div key={`${lot.lot}-${li}`} className="flex items-center justify-between gap-2 text-sm text-slate-500">
-                        <span className="truncate">Lot {lot.lot || "-"}</span>
-                        <span className="shrink-0 flex items-center gap-1.5">
-                          <span>หมดอายุ {lot.expDate ? formatThaiDateTime(lot.expDate).split("\n")[0] : "-"}</span>
-                          <span className="font-semibold text-slate-600">{lot.quantity?.toLocaleString?.() ?? lot.quantity} หน่วย</span>
-                        </span>
-                      </div>
-                    ))}
                   </div>
-                )}
-              </div>
-            ))}
+
+                  <div className={`mt-2 flex items-center justify-between rounded-xl px-3 py-2 ${s.badgeBg}`}>
+                    <div className="flex flex-col gap-1">
+                      <span className={`text-sm font-semibold ${s.badgeText}`}>Min {w.min ?? "-"} / Max {w.max ?? "-"}</span>
+                      <StatusBadge status={w.status} />
+                    </div>
+                    <span className={`text-lg font-black ${s.badgeText}`}>{w.quantity ?? 0} หน่วย</span>
+                  </div>
+
+                  {w.lots.length > 0 && (
+                    <div className="mt-2 space-y-1.5">
+                      {w.lots.map((lot, li) => {
+                        const expired = lot.expDate && new Date(lot.expDate).getTime() < Date.now();
+                        return (
+                          <div key={`${lot.lot}-${li}`} className="flex items-center justify-between gap-2 text-sm">
+                            <span className="truncate font-semibold text-slate-600">Lot {lot.lot || "-"}</span>
+                            <span className="shrink-0 flex items-center gap-2">
+                              <span className="text-slate-400">หมดอายุ {lot.expDate ? formatThaiDateTime(lot.expDate).split("\n")[0] : "-"}</span>
+                              <span className={`rounded-full px-2.5 py-1 text-sm font-bold ${expired ? "bg-red-100 text-red-600" : "bg-[#eaf7ef] text-[#16a34a]"}`}>
+                                {lot.quantity?.toLocaleString?.() ?? lot.quantity} หน่วย
+                              </span>
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => {
+                      setActiveModal(null);
+                      goToWarehouse({ drugName: w.drugName, departmentId: w.deptId });
+                    }}
+                    className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#007bff] py-2 text-sm font-bold text-white hover:bg-[#0062cc]"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" /> ไปหน้าคลังยาเพื่อจัดการ
+                  </button>
+                </div>
+              );
+            })}
           {watchCounts[watchStatus] === 0 && <p className="py-6 text-center text-sm text-slate-400">ไม่มีรายการในกลุ่มนี้</p>}
         </div>
       </DetailModal>
