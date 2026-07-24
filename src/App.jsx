@@ -8,6 +8,7 @@ import WarehousePage from "./WarehousePage";
 import StaffPage from "./StaffPage";
 import DrugsPage from "./DrugsPage";
 import DepartmentsPage from "./DepartmentsPage";
+import ReportsPage from "./ReportsPage";
 import Sidebar from "./Sidebar";
 
 function ScrollToTop() {
@@ -27,6 +28,7 @@ const PAGE_TITLES = {
   "/admin/drugs": "รายการยา | AVDC",
   "/admin/staff": "เจ้าหน้าที่ | AVDC",
   "/admin/departments": "หน่วยงาน | AVDC",
+  "/admin/reports": "รายงาน | AVDC",
 };
 
 function PageTitle() {
@@ -111,6 +113,14 @@ export default function App() {
           element={
             <AdminShell>
               <DepartmentsPage />
+            </AdminShell>
+          }
+        />
+        <Route
+          path="/admin/reports"
+          element={
+            <AdminShell>
+              <ReportsPage />
             </AdminShell>
           }
         />

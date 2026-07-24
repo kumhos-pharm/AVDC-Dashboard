@@ -64,6 +64,7 @@ export default function Sidebar() {
     { icon: Building2, label: "หน่วยงาน", to: "/admin/departments" },
     { icon: Warehouse, label: "คงคลัง", to: "/admin/warehouse" },
     { icon: Users, label: "เจ้าหน้าที่", to: "/admin/staff" },
+    { icon: FileText, label: "รายงาน", to: "/admin/reports" },
   ];
 
   return (
@@ -79,7 +80,6 @@ export default function Sidebar() {
         {navLinks.map((item) => (
           <NavItem key={item.to} {...item} active={pathname === item.to} />
         ))}
-        <NavItem icon={FileText} label="รายงาน" />
         <div className="mt-auto">
           <NavItem icon={Info} label="ข้อมูลเพิ่มเติม" />
         </div>

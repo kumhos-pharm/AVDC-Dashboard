@@ -24,6 +24,10 @@ import {
   ListChecks,
   Clock,
   ExternalLink,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useAvdcData } from "./useAvdcData";
 import avdcLogo from "./assets/avdc-logo.png";
@@ -196,6 +200,10 @@ export default function AVDCDashboard() {
   const { loading, refreshing, error, departments, drugRows, totalDrugCount, totalQuantity, lastUpdated, expiringLots, lotsByDrugDept, reload } = useAvdcData();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
+  const [filterDept, setFilterDept] = useState("all"); // "all" | ชื่อหน่วยงาน — แสดงเฉพาะยาที่มีของในหน่วยงานนี้
+  const [filterStatus, setFilterStatus] = useState("all"); // "all" | "low" | "near" | "over" | "ok"
+  const [sortBy, setSortBy] = useState(null); // null = เรียงตามชื่อยา (ค่าเริ่มต้น) | ชื่อหน่วยงาน = เรียงตามยอดคงเหลือของหน่วยงานนั้น
+  const [sortDir, setSortDir] = useState("asc"); // "asc" | "desc"
   const [activeModal, setActiveModal] = useState(null); // "drugs" | "depts" | "qty" | "expiring" | "watch" | null
   const [watchStatus, setWatchStatus] = useState(null); // "low" | "near" | "over" — ใช้ตอนเปิด popup รายการที่ต้องติดตาม
   const [cellDetail, setCellDetail] = useState(null); // { drugName, deptName, deptId, cell } — ใช้ตอนคลิกยอดคงเหลือในตารางหลัก (แสดง popup แทนการเปลี่ยนหน้าไปคลังยา)
@@ -239,9 +247,48 @@ export default function AVDCDashboard() {
   );
 
   const filteredDrugs = useMemo(() => {
-    if (!query.trim()) return drugRows;
-    return drugRows.filter((d) => d.name.toLowerCase().includes(query.trim().toLowerCase()));
-  }, [query, drugRows]);
+    let rows = drugRows;
+
+    if (query.trim()) {
+      rows = rows.filter((d) => d.name.toLowerCase().includes(query.trim().toLowerCase()));
+    }
+
+    if (filterDept !== "all") {
+      rows = rows.filter((d) => d.byDept[filterDept] && d.byDept[filterDept].quantity > 0);
+    }
+
+    if (filterStatus !== "all") {
+      rows = rows.filter((d) => {
+        // ถ้าเลือกกรองหน่วยงานไว้ด้วย ให้เช็คสถานะเฉพาะหน่วยงานนั้น ไม่งั้นเช็คว่ามีหน่วยงานไหนตรงเงื่อนไขบ้าง
+        if (filterDept !== "all") return statusOf(d.byDept[filterDept]) === filterStatus;
+        return Object.values(d.byDept).some((cell) => statusOf(cell) === filterStatus);
+      });
+    }
+
+    if (sortBy) {
+      rows = [...rows].sort((a, b) => {
+        const qa = a.byDept[sortBy]?.quantity ?? -1;
+        const qb = b.byDept[sortBy]?.quantity ?? -1;
+        return sortDir === "asc" ? qa - qb : qb - qa;
+      });
+    } else {
+      rows = [...rows].sort((a, b) => {
+        const cmp = a.name.localeCompare(b.name, "th");
+        return sortDir === "asc" ? cmp : -cmp;
+      });
+    }
+
+    return rows;
+  }, [query, drugRows, filterDept, filterStatus, sortBy, sortDir]);
+
+  function toggleSort(colKey) {
+    if (sortBy === colKey) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(colKey);
+      setSortDir(colKey === null ? "asc" : "desc"); // คลิกหน่วยงานครั้งแรก เรียงมาก→น้อยก่อน (ดูของใกล้หมดง่ายกว่า)
+    }
+  }
 
   const summaryRows = useMemo(
     () =>
@@ -421,14 +468,51 @@ export default function AVDCDashboard() {
                   <MapPin className="h-4 w-4 shrink-0" style={{ color: NAVY }} />
                   ยา Antidote &amp; Vital Drug ที่มีในหน่วยงาน (แสดงเฉพาะคงเหลือ)
                 </h2>
-                <div className="relative w-full sm:w-64">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <input
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="ค้นหา Antidote / Vital Drug..."
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2 pl-10 pr-3.5 text-sm outline-none transition focus:border-blue-500 focus:bg-white"
-                  />
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                  <div className="relative w-full sm:w-56">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="ค้นหา Antidote / Vital Drug..."
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2 pl-10 pr-3.5 text-sm outline-none transition focus:border-blue-500 focus:bg-white"
+                    />
+                  </div>
+                  <div className="relative w-full sm:w-44">
+                    <SlidersHorizontal className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                    <select
+                      value={filterDept}
+                      onChange={(e) => setFilterDept(e.target.value)}
+                      className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50/50 py-2 pl-9 pr-3.5 text-sm outline-none transition focus:border-blue-500 focus:bg-white"
+                    >
+                      <option value="all">ทุกหน่วยงาน</option>
+                      {departments.map((dep) => (
+                        <option key={dep.id} value={dep.name}>{dep.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="relative w-full sm:w-44">
+                    <AlertTriangle className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                    <select
+                      value={filterStatus}
+                      onChange={(e) => setFilterStatus(e.target.value)}
+                      className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50/50 py-2 pl-9 pr-3.5 text-sm outline-none transition focus:border-blue-500 focus:bg-white"
+                    >
+                      <option value="all">ทุกสถานะ</option>
+                      <option value="low">ต่ำกว่า Min</option>
+                      <option value="near">ใกล้ต่ำกว่า Min</option>
+                      <option value="over">เกิน Max</option>
+                      <option value="ok">เพียงพอ</option>
+                    </select>
+                  </div>
+                  {(filterDept !== "all" || filterStatus !== "all" || query) && (
+                    <button
+                      onClick={() => { setFilterDept("all"); setFilterStatus("all"); setQuery(""); }}
+                      className="flex items-center gap-1 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-400 hover:text-red-500"
+                    >
+                      <X className="h-3.5 w-3.5" /> ล้างตัวกรอง
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -439,19 +523,40 @@ export default function AVDCDashboard() {
                 <table className="w-full min-w-[1180px] border-collapse text-sm">
                   <thead>
                     <tr>
-                      <th className="sticky left-0 z-10 bg-white p-2 text-left align-bottom font-bold text-slate-600 border-b border-slate-100">
-                        Antidote / Vital Drug
+                      <th
+                        onClick={() => toggleSort(null)}
+                        className="sticky left-0 z-10 cursor-pointer select-none bg-white p-2 text-left align-bottom font-bold text-slate-600 border-b border-slate-100 hover:text-[#007bff]"
+                        title="เรียงตามชื่อยา"
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          Antidote / Vital Drug
+                          {sortBy === null ? (
+                            sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                          ) : (
+                            <ArrowUpDown className="h-3 w-3 text-slate-300" />
+                          )}
+                        </span>
                       </th>
                       {departments.map((dep) => {
                         const isHome = dep.id === homeDept?.id;
+                        const isSorted = sortBy === dep.name;
                         return (
                           <th 
                             key={dep.id} 
-                            className={`p-2 text-center align-bottom font-bold border-b border-slate-100 min-w-[72px] ${
-                              isHome ? "bg-[#0d2a63] text-white rounded-t-lg" : "text-slate-600"
+                            onClick={() => toggleSort(dep.name)}
+                            className={`p-2 text-center align-bottom font-bold border-b border-slate-100 min-w-[72px] cursor-pointer select-none transition ${
+                              isHome ? "bg-[#0d2a63] text-white rounded-t-lg hover:bg-[#0d2a63]/90" : "text-slate-600 hover:text-[#007bff]"
                             }`}
+                            title={`เรียงตามยอดคงเหลือของ ${dep.name}`}
                           >
-                            <div className="text-xs truncate">{dep.name}</div>
+                            <div className="flex items-center justify-center gap-1 text-xs truncate">
+                              {dep.name}
+                              {isSorted ? (
+                                sortDir === "asc" ? <ArrowUp className="h-3 w-3 shrink-0" /> : <ArrowDown className="h-3 w-3 shrink-0" />
+                              ) : (
+                                <ArrowUpDown className={`h-3 w-3 shrink-0 ${isHome ? "text-blue-200" : "text-slate-300"}`} />
+                              )}
+                            </div>
                             <div className={`text-[10.5px] font-semibold ${isHome ? "text-blue-100" : "text-slate-400"}`}>
                               คงเหลือ
                             </div>
@@ -461,6 +566,13 @@ export default function AVDCDashboard() {
                     </tr>
                   </thead>
                   <tbody>
+                    {filteredDrugs.length === 0 && (
+                      <tr>
+                        <td colSpan={departments.length + 1} className="py-8 text-center text-sm text-slate-400">
+                          ไม่พบรายการที่ตรงกับตัวกรองที่เลือก
+                        </td>
+                      </tr>
+                    )}
                     {filteredDrugs.map((row) => (
                       <tr key={row.name} className="border-t border-slate-100 hover:bg-slate-50/50">
                         <td className="sticky left-0 z-10 whitespace-nowrap bg-white p-2.5 font-bold text-slate-700 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
