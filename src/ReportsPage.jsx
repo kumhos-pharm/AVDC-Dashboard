@@ -149,39 +149,39 @@ export default function ReportsPage() {
   const columns =
     reportType === "stock"
       ? [
-          { key: "drugName", label: "ชื่อยา" },
-          { key: "strength", label: "ความแรง" },
-          { key: "form", label: "รูปแบบยา" },
-          { key: "lot", label: "Lot" },
-          { key: "expDate", label: "วันหมดอายุ" },
-          { key: "deptName", label: "หน่วยงาน" },
-          { key: "quantity", label: "คงเหลือ", align: "right" },
-          { key: "min", label: "Min", align: "right" },
-          { key: "max", label: "Max", align: "right" },
-          { key: "status", label: "สถานะ" },
+          { key: "drugName", label: "ชื่อยา", width: "18%" },
+          { key: "strength", label: "ความแรง", width: "8%" },
+          { key: "form", label: "รูปแบบยา", width: "9%" },
+          { key: "lot", label: "Lot", width: "11%" },
+          { key: "expDate", label: "วันหมดอายุ", width: "11%" },
+          { key: "deptName", label: "หน่วยงาน", width: "11%" },
+          { key: "quantity", label: "คงเหลือ", align: "right", width: "7%" },
+          { key: "min", label: "Min", align: "right", width: "6%" },
+          { key: "max", label: "Max", align: "right", width: "6%" },
+          { key: "status", label: "สถานะ", width: "13%" },
         ]
       : reportType === "watch"
       ? [
-          { key: "drugName", label: "ชื่อยา" },
-          { key: "strength", label: "ความแรง" },
-          { key: "form", label: "รูปแบบยา" },
-          { key: "lot", label: "Lot" },
-          { key: "expDate", label: "วันหมดอายุ" },
-          { key: "deptName", label: "หน่วยงาน" },
-          { key: "quantity", label: "คงเหลือ", align: "right" },
-          { key: "min", label: "Min", align: "right" },
-          { key: "max", label: "Max", align: "right" },
-          { key: "status", label: "สถานะ" },
+          { key: "drugName", label: "ชื่อยา", width: "18%" },
+          { key: "strength", label: "ความแรง", width: "8%" },
+          { key: "form", label: "รูปแบบยา", width: "9%" },
+          { key: "lot", label: "Lot", width: "11%" },
+          { key: "expDate", label: "วันหมดอายุ", width: "11%" },
+          { key: "deptName", label: "หน่วยงาน", width: "11%" },
+          { key: "quantity", label: "คงเหลือ", align: "right", width: "7%" },
+          { key: "min", label: "Min", align: "right", width: "6%" },
+          { key: "max", label: "Max", align: "right", width: "6%" },
+          { key: "status", label: "สถานะ", width: "13%" },
         ]
       : [
-          { key: "drugName", label: "ชื่อยา" },
-          { key: "strength", label: "ความแรง" },
-          { key: "form", label: "รูปแบบยา" },
-          { key: "lot", label: "Lot" },
-          { key: "expDate", label: "วันหมดอายุ" },
-          { key: "deptName", label: "หน่วยงาน" },
-          { key: "quantity", label: "คงเหลือ", align: "right" },
-          { key: "daysLeft", label: "เหลืออีก (วัน)", align: "right" },
+          { key: "drugName", label: "ชื่อยา", width: "24%" },
+          { key: "strength", label: "ความแรง", width: "10%" },
+          { key: "form", label: "รูปแบบยา", width: "11%" },
+          { key: "lot", label: "Lot", width: "14%" },
+          { key: "expDate", label: "วันหมดอายุ", width: "13%" },
+          { key: "deptName", label: "หน่วยงาน", width: "13%" },
+          { key: "quantity", label: "คงเหลือ", align: "right", width: "7%" },
+          { key: "daysLeft", label: "เหลืออีก (วัน)", align: "right", width: "8%" },
         ];
 
   function exportExcel() {
@@ -312,13 +312,18 @@ export default function ReportsPage() {
           </div>
 
           {/* ตารางรายงาน */}
-          <table className="w-full border-collapse text-sm">
-            <thead>
+          <table className="w-full border-collapse text-sm print:text-[9.5px]" style={{ tableLayout: "fixed" }}>
+            <colgroup>
+              {columns.map((c) => (
+                <col key={c.key} style={{ width: c.width }} />
+              ))}
+            </colgroup>
+            <thead className="print:table-header-group">
               <tr>
                 {columns.map((c) => (
                   <th
                     key={c.key}
-                    className={`border border-slate-200 bg-slate-50 px-2.5 py-2 font-bold text-slate-600 print:bg-slate-100 ${c.align === "right" ? "text-right" : "text-left"}`}
+                    className={`border border-slate-200 bg-slate-50 px-2.5 py-2 font-bold text-slate-600 print:bg-slate-100 print:px-1.5 print:py-1 break-words ${c.align === "right" ? "text-right" : "text-left"}`}
                   >
                     {c.label}
                   </th>
@@ -334,9 +339,12 @@ export default function ReportsPage() {
                 </tr>
               ) : (
                 activeRows.map((r, idx) => (
-                  <tr key={idx} className="break-inside-avoid">
+                  <tr key={idx} className="break-inside-avoid print:break-inside-avoid">
                     {columns.map((c) => (
-                      <td key={c.key} className={`border border-slate-200 px-2.5 py-1.5 ${c.align === "right" ? "text-right font-semibold" : ""}`}>
+                      <td
+                        key={c.key}
+                        className={`border border-slate-200 px-2.5 py-1.5 print:px-1.5 print:py-1 break-words leading-snug ${c.align === "right" ? "text-right font-semibold" : ""}`}
+                      >
                         {r[c.key]}
                       </td>
                     ))}
@@ -355,8 +363,41 @@ export default function ReportsPage() {
       {/* กำหนดขนาดกระดาษ/ระยะขอบตอนพิมพ์ */}
       <style>{`
         @media print {
-          @page { size: A4 portrait; margin: 12mm; }
+          @page { size: A4 portrait; margin: 10mm; }
           body { background: white !important; }
+          * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+          #report-print-area {
+            width: 100% !important;
+            max-width: 100% !important;
+          }
+
+          #report-print-area table {
+            table-layout: fixed !important;
+            width: 100% !important;
+          }
+
+          #report-print-area th,
+          #report-print-area td {
+            word-break: break-word;
+            overflow-wrap: break-word;
+            white-space: normal;
+          }
+
+          /* ทำให้หัวตารางแสดงซ้ำทุกหน้า และหัวรายงานไม่ถูกตัดคร่อมหน้า */
+          #report-print-area thead {
+            display: table-header-group;
+          }
+          #report-print-area tfoot {
+            display: table-footer-group;
+          }
+          #report-print-area tr {
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+          #report-print-area > div:first-child {
+            page-break-after: avoid;
+          }
         }
       `}</style>
     </div>
