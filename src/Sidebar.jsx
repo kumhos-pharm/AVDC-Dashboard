@@ -71,7 +71,7 @@ export default function Sidebar() {
     <>
       {/* แถบเมนูด้านซ้าย — จอกว้าง (จอคอมพิวเตอร์/แท็บเล็ตแนวนอนขนาดใหญ่) */}
       <aside
-        className="fixed inset-y-0 left-0 z-30 hidden w-24 flex-col items-center gap-1.5 overflow-y-auto py-6 lg:flex"
+        className="fixed inset-y-0 left-0 z-30 hidden w-24 flex-col items-center gap-1.5 overflow-y-auto py-6 lg:flex print:hidden"
         style={{ backgroundColor: NAVY }}
       >
         <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10">
@@ -85,9 +85,9 @@ export default function Sidebar() {
         </div>
       </aside>
 
-      {/* แถบเมนูด้านล่าง — มือถือ/แท็บเล็ต (ซ่อนบนจอกว้าง lg ขึ้นไป) */}
+      {/* แถบเมนูด้านล่าง — มือถือ/แท็บเล็ต (ซ่อนบนจอกว้าง lg ขึ้นไป และซ่อนตอนพิมพ์) */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-30 flex items-stretch gap-0.5 px-1.5 pb-[env(safe-area-inset-bottom)] pt-1 shadow-[0_-2px_10px_rgba(0,0,0,0.15)] lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 flex items-stretch gap-0.5 px-1.5 pb-[env(safe-area-inset-bottom)] pt-1 shadow-[0_-2px_10px_rgba(0,0,0,0.15)] lg:hidden print:hidden"
         style={{ backgroundColor: NAVY }}
       >
         {navLinks.map((item) => (

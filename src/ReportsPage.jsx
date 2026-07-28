@@ -367,6 +367,11 @@ export default function ReportsPage() {
           body { background: white !important; }
           * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
+          /* กันเมนูซ้าย/เมนูล่างของแอปหลุดมาในหน้าพิมพ์ เผื่อ class print:hidden ของ Sidebar ไม่ทำงาน */
+          aside, nav {
+            display: none !important;
+          }
+
           #report-print-area {
             width: 100% !important;
             max-width: 100% !important;
