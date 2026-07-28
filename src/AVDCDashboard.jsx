@@ -488,9 +488,9 @@ export default function AVDCDashboard() {
         {/* ========================================================================= */}
         {/* 2. ส่วนข้อมูลอื่นๆ ตาราง และไซด์บาร์ */}
         {/* ========================================================================= */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_360px]">
+        <div className="space-y-4">
           
-          {/* ฝั่งซ้าย: ตารางข้อมูลยา */}
+          {/* ตารางข้อมูลยา — เต็มความกว้างหน้าจอ (ไม่มีไซด์บาร์ขวาแล้ว ลดการเลื่อน scroll แนวนอน) */}
           <main className="space-y-4 min-w-0">
             
             {/* ตารางหลัก: ยาในแต่ละหน่วยงาน */}
@@ -548,7 +548,7 @@ export default function AVDCDashboard() {
                 </div>
               </div>
 
-              <p className="mb-2 flex items-center gap-1 text-xs font-semibold text-slate-400 sm:hidden">
+              <p className="mb-2 flex items-center gap-1 text-xs font-semibold text-slate-400 lg:hidden">
                 <span>👉</span> เลื่อนซ้าย-ขวาเพื่อดูข้อมูลหน่วยงานอื่น
               </p>
               <div className="overflow-x-auto rounded-xl">
@@ -658,7 +658,7 @@ export default function AVDCDashboard() {
             </div>
 
             {/* ตารางเปรียบเทียบ Min/Max */}
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_300px]">
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_320px]">
               <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm min-w-0">
                 <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-slate-700">
                   <BarChart3 className="h-4 w-4 shrink-0" style={{ color: NAVY }} />
@@ -734,6 +734,9 @@ export default function AVDCDashboard() {
                   </table>
                 </div>
               </div>
+
+              {/* ฝั่งขวา: รายการที่ต้องติดตาม + คำแนะนำการแปลผล + ติดต่อสอบถาม อยู่แถวเดียวกับตารางสถานะคงคลัง */}
+              <div className="flex flex-col gap-4">
 
               {/* การ์ดรายการติดตามด่วน */}
               <div className="rounded-2xl border border-red-100 bg-[#fff5f5] p-4 shadow-sm flex flex-col justify-between">
@@ -832,46 +835,44 @@ export default function AVDCDashboard() {
                 </div>
               </div>
 
+              {/* คำแนะนำการแปลผล (คงเหลือ) — ย้ายมาอยู่แถวเดียวกับรายการที่ต้องติดตาม */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <p className="mb-3 text-sm font-bold text-slate-600">คำแนะนำการแปลผล (คงเหลือ)</p>
+                <div className="space-y-2.5 text-sm">
+                  {Object.entries(STATUS).map(([key, s]) => {
+                    const Icon = s.icon;
+                    let desc = "";
+                    if (key === "ok") desc = "คงเหลืออยู่ในช่วง Min - Max";
+                    if (key === "near") desc = "คงเหลือ ≤ 20% เหนือ Min";
+                    if (key === "low") desc = "คงเหลือต่ำกว่า Min";
+                    if (key === "over") desc = "คงเหลือมากกว่า Max";
+                    if (key === "none") desc = "ไม่มีสำรองในหน่วยงานนี้";
+                    return (
+                      <div key={key} className="flex items-start gap-2.5 font-['Kanit']">
+                        <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${s.badgeText}`} />
+                        <div>
+                          <span className={`font-bold ${s.badgeText}`}>{s.label}</span>
+                          <p className="text-xs text-slate-500 mt-0.5 leading-snug">{desc}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-blue-100 bg-[#eef6ff] p-4 shadow-sm">
+                <p className="mb-1 flex items-center gap-1.5 text-sm font-bold text-[#20509e]">
+                  <Lightbulb className="h-4.5 w-4.5" /> ไม่พบยาในหน่วยงานของท่าน?
+                </p>
+                <p className="text-sm text-slate-600">โปรดติดต่อ ศูนย์ AVDC (Phar-OPD)</p>
+                <p className="text-base font-bold text-slate-800 mt-1">โทร. 042-33440 , 042-334412-3 ต่อ xxxx</p>
+                <p className="text-base font-bold text-slate-800 mt-1">มือถือ 000-0000000</p>
+              </div>
+
+              </div>
+
             </div>
           </main>
-
-          {/* ฝั่งขวาด้านล่าง: เมนูปีกนกช่วยเหลือ */}
-          <aside className="flex flex-col gap-4">
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="mb-3 text-sm font-bold text-slate-600">คำแนะนำการแปลผล (คงเหลือ)</p>
-              <div className="space-y-2.5 text-sm">
-                {Object.entries(STATUS).map(([key, s]) => {
-                  const Icon = s.icon;
-                  let desc = "";
-                  if (key === "ok") desc = "คงเหลืออยู่ในช่วง Min - Max";
-                  if (key === "near") desc = "คงเหลือ ≤ 20% เหนือ Min";
-                  if (key === "low") desc = "คงเหลือต่ำกว่า Min";
-                  if (key === "over") desc = "คงเหลือมากกว่า Max";
-                  if (key === "none") desc = "ไม่มีสำรองในหน่วยงานนี้";
-                  return (
-                    <div key={key} className="flex items-start gap-2.5 font-['Kanit']">
-                      <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${s.badgeText}`} />
-                      <div>
-                        <span className={`font-bold ${s.badgeText}`}>{s.label}</span>
-                        <p className="text-xs text-slate-500 mt-0.5 leading-snug">{desc}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-blue-100 bg-[#eef6ff] p-4 shadow-sm">
-              <p className="mb-1 flex items-center gap-1.5 text-sm font-bold text-[#20509e]">
-                <Lightbulb className="h-4.5 w-4.5" /> ไม่พบยาในหน่วยงานของท่าน?
-              </p>
-              <p className="text-sm text-slate-600">โปรดติดต่อ ศูนย์ AVDC (Phar-OPD)</p>
-              <p className="text-base font-bold text-slate-800 mt-1">โทร. 042-33440 , 042-334412-3 ต่อ xxxx</p>
-              <p className="text-base font-bold text-slate-800 mt-1">มือถือ 000-0000000</p>
-            </div>
-
-          </aside>
 
         </div>
 
