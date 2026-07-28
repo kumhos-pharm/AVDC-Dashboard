@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Building2, Search, Pencil, Trash2, Check, X, Loader2, AlertTriangle, PackageSearch, Undo2 } from "lucide-react";
+import { Building2, Search, Pencil, Trash2, Check, XCircle, Loader2, AlertTriangle, PackageSearch, Undo2 } from "lucide-react";
 import { useDrugsAndDepartments } from "./useDispense";
 import { useWarehouseLots, useWarehouseMinMax, updateLotDetails, updateMinMax, removeStockLot, returnLotToWarehouse } from "./useWarehouse";
 import StaffAutocomplete from "./StaffAutocomplete";
@@ -238,8 +238,11 @@ function DeptLotRow({ lot, minMax, onDone, warehouseDept, isWarehouseView }) {
             >
               {returning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Undo2 className="h-3.5 w-3.5" />} ยืนยันคืนคลัง
             </button>
-            <button onClick={() => setReturnMode(false)} className="flex items-center gap-1 text-xs font-medium text-slate-400 underline">
-              <X className="h-3.5 w-3.5" /> ยกเลิก
+            <button
+              onClick={() => setReturnMode(false)}
+              className="flex items-center gap-1 rounded-full border border-red-100 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-100"
+            >
+              <XCircle className="h-3.5 w-3.5" /> ยกเลิก
             </button>
           </div>
           {returnError && <p className="mt-2 text-xs font-medium text-red-500">{returnError}</p>}
@@ -288,8 +291,11 @@ function DeptLotRow({ lot, minMax, onDone, warehouseDept, isWarehouseView }) {
             >
               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} บันทึก
             </button>
-            <button onClick={() => setEditing(false)} className="flex items-center gap-1 text-xs font-medium text-slate-400 underline">
-              <X className="h-3.5 w-3.5" /> ยกเลิก
+            <button
+              onClick={() => setEditing(false)}
+              className="flex items-center gap-1 rounded-full border border-red-100 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-100"
+            >
+              <XCircle className="h-3.5 w-3.5" /> ยกเลิก
             </button>
           </div>
           {error && <p className="mt-2 text-xs font-medium text-red-500">{error}</p>}
