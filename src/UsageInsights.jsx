@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
-import { TrendingUp, Trophy, Building2, Pill, Loader2, AlertOctagon } from "lucide-react";
+import { TrendingUp, Building2, Pill, Loader2, AlertOctagon } from "lucide-react";
 import {
   ResponsiveContainer,
-  LineChart,
-  Line,
+  BarChart,
+  Bar,
   CartesianGrid,
   XAxis,
   YAxis,
@@ -221,31 +221,37 @@ export default function UsageInsights() {
           ยังไม่มีประวัติการจ่ายยาในช่วง 6 เดือนที่ผ่านมา
         </div>
       ) : (
-        <div className="h-[280px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData} margin={{ top: 4, right: 12, left: -12, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#eef1f6" />
-              <XAxis dataKey="label" tick={{ fontSize: 11, fontFamily: "Kanit", fill: "#94a3b8" }} tickLine={false} axisLine={{ stroke: "#e2e8f0" }} />
-              <YAxis tick={{ fontSize: 11, fontFamily: "Kanit", fill: "#94a3b8" }} tickLine={false} axisLine={false} allowDecimals={false} />
-              <Tooltip
-                contentStyle={{ fontFamily: "Kanit", fontSize: 12, borderRadius: 12, border: "1px solid #eef1f6" }}
-                labelStyle={{ fontWeight: 700, color: NAVY }}
-              />
-              <Legend wrapperStyle={{ fontFamily: "Kanit", fontSize: 11 }} />
-              {seriesKeys.map((key, idx) => (
-                <Line
-                  key={key}
-                  type="monotone"
-                  dataKey={key}
-                  stroke={key === OTHERS_KEY ? OTHERS_COLOR : SERIES_COLORS[idx % SERIES_COLORS.length]}
-                  strokeWidth={2.5}
-                  dot={{ r: 3 }}
-                  activeDot={{ r: 5 }}
+        <>
+          {chartData.length < 3 && (
+            <p className="mb-2 text-center text-[11px] font-semibold text-slate-400">
+              มีข้อมูลแค่ {chartData.length} {granularity === "month" ? "เดือน" : "สัปดาห์"} — แนวโน้มจะเห็นชัดขึ้นเมื่อสะสมข้อมูลมากขึ้น
+            </p>
+          )}
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 4, right: 12, left: -12, bottom: 0 }} barCategoryGap={chartData.length <= 2 ? "35%" : "20%"} barGap={4}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#eef1f6" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fontFamily: "Kanit", fill: "#94a3b8" }} tickLine={false} axisLine={{ stroke: "#e2e8f0" }} />
+                <YAxis tick={{ fontSize: 11, fontFamily: "Kanit", fill: "#94a3b8" }} tickLine={false} axisLine={false} allowDecimals={false} width={40} />
+                <Tooltip
+                  cursor={{ fill: "#f8fafc" }}
+                  contentStyle={{ fontFamily: "Kanit", fontSize: 12, borderRadius: 12, border: "1px solid #eef1f6" }}
+                  labelStyle={{ fontWeight: 700, color: NAVY }}
                 />
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+                <Legend wrapperStyle={{ fontFamily: "Kanit", fontSize: 11 }} />
+                {seriesKeys.map((key, idx) => (
+                  <Bar
+                    key={key}
+                    dataKey={key}
+                    fill={key === OTHERS_KEY ? OTHERS_COLOR : SERIES_COLORS[idx % SERIES_COLORS.length]}
+                    radius={[5, 5, 0, 0]}
+                    maxBarSize={40}
+                  />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </>
       )}
 
       {/* Top 5 ยาที่ใช้บ่อยที่สุด / หน่วยงานที่เบิกบ่อยที่สุด */}
