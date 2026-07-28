@@ -331,6 +331,32 @@ export default function AVDCDashboard() {
     over: watchlist.filter((w) => w.status === "over").length,
   };
 
+  // สัดส่วนสถานะยาทั้งหมด (นับทุก เพียงพอ/ใกล้ต่ำกว่า/ต่ำกว่า/เกิน Max ยกเว้น "ไม่มี") — ใช้ทำแถบสรุปในการ์ดรายการที่ต้องติดตาม
+  const statusBreakdown = useMemo(() => {
+    const counts = { ok: 0, near: 0, low: 0, over: 0 };
+    drugRows.forEach((d) => {
+      Object.values(d.byDept).forEach((cell) => {
+        const status = statusOf(cell);
+        if (status === "none") return;
+        counts[status] += 1;
+      });
+    });
+    const total = counts.ok + counts.near + counts.low + counts.over;
+    return { counts, total };
+  }, [drugRows]);
+
+  // 3 รายการวิกฤตสุดสำหรับพรีวิวในการ์ด — ต่ำกว่า Min ก่อน (ยิ่งน้อยยิ่งเร่งด่วน) ตามด้วยใกล้ต่ำกว่า Min แล้วค่อยเกิน Max (ยิ่งเกินเยอะยิ่งเร่งด่วน)
+  const topWatchItems = useMemo(() => {
+    const priority = { low: 0, near: 1, over: 2 };
+    return [...watchlist]
+      .sort((a, b) => {
+        if (priority[a.status] !== priority[b.status]) return priority[a.status] - priority[b.status];
+        if (a.status === "over") return (b.quantity ?? 0) - (a.quantity ?? 0);
+        return (a.quantity ?? 0) - (b.quantity ?? 0);
+      })
+      .slice(0, 3);
+  }, [watchlist]);
+
   if (loading) {
     return (
       <div className="flex min-h-[400px] w-full items-center justify-center gap-2 bg-[#eef1f6] text-slate-500 font-['Kanit']">
@@ -745,12 +771,64 @@ export default function AVDCDashboard() {
                       <span className="font-extrabold text-slate-700">{watchCounts.over} รายการ</span>
                     </button>
                   </div>
+
+                  {/* แถบสัดส่วนสถานะยาทั้งหมด */}
+                  <div className="mt-3 rounded-xl border border-red-100 bg-white/90 p-3">
+                    <p className="mb-2 text-xs font-bold text-slate-500">สัดส่วนสถานะยาทั้งหมด</p>
+                    <div className="flex h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                      {statusBreakdown.total > 0 && (
+                        <>
+                          <div className={STATUS.ok.dot} style={{ width: `${(statusBreakdown.counts.ok / statusBreakdown.total) * 100}%` }} />
+                          <div className={STATUS.near.dot} style={{ width: `${(statusBreakdown.counts.near / statusBreakdown.total) * 100}%` }} />
+                          <div className={STATUS.low.dot} style={{ width: `${(statusBreakdown.counts.low / statusBreakdown.total) * 100}%` }} />
+                          <div className={STATUS.over.dot} style={{ width: `${(statusBreakdown.counts.over / statusBreakdown.total) * 100}%` }} />
+                        </>
+                      )}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-bold">
+                      <span className={STATUS.ok.badgeText}>เพียงพอ {statusBreakdown.total ? Math.round((statusBreakdown.counts.ok / statusBreakdown.total) * 100) : 0}%</span>
+                      <span className={STATUS.near.badgeText}>ใกล้หมด {statusBreakdown.total ? Math.round((statusBreakdown.counts.near / statusBreakdown.total) * 100) : 0}%</span>
+                      <span className={STATUS.low.badgeText}>ต่ำกว่า Min {statusBreakdown.total ? Math.round((statusBreakdown.counts.low / statusBreakdown.total) * 100) : 0}%</span>
+                      <span className={STATUS.over.badgeText}>เกิน Max {statusBreakdown.total ? Math.round((statusBreakdown.counts.over / statusBreakdown.total) * 100) : 0}%</span>
+                    </div>
+                  </div>
+
+                  {/* รายการล่าสุดที่ต้องดูก่อน — พรีวิว 3 รายการวิกฤตสุด */}
+                  {topWatchItems.length > 0 && (
+                    <div className="mt-3 rounded-xl border border-red-100 bg-white/90 p-3">
+                      <p className="mb-2 text-xs font-bold text-slate-500">รายการล่าสุดที่ต้องดูก่อน</p>
+                      <div className="space-y-1">
+                        {topWatchItems.map((w, idx) => {
+                          const s = STATUS[w.status];
+                          return (
+                            <button
+                              key={`${w.drugName}-${w.deptName}-${idx}`}
+                              onClick={() => goToWarehouse({ drugName: w.drugName, departmentId: w.deptId })}
+                              className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left transition hover:bg-slate-50"
+                              title="คลิกเพื่อไปหน้าคลังยา"
+                            >
+                              <span className="min-w-0 truncate text-xs font-semibold text-slate-700">
+                                {w.drugName} <span className="font-normal text-slate-400">— {w.deptName}</span>
+                              </span>
+                              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${s.badgeBg} ${s.badgeText}`}>{s.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                <div className="mt-4">
+                <div className="mt-4 space-y-2">
                   <div className="rounded-xl bg-red-600 py-2.5 text-center text-base font-black text-white">
                     รวม {watchCounts.low + watchCounts.near + watchCounts.over} รายการ
                   </div>
+                  <button
+                    onClick={() => { setWatchStatus("all"); setActiveModal("watch"); }}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-red-200 bg-white py-2 text-sm font-bold text-red-600 transition hover:bg-red-50"
+                  >
+                    <ListChecks className="h-4 w-4" /> ดูรายการทั้งหมด
+                  </button>
                 </div>
               </div>
 
@@ -952,15 +1030,19 @@ export default function AVDCDashboard() {
         open={activeModal === "watch"}
         onClose={() => setActiveModal(null)}
         title={
-          watchStatus === "low"
+          watchStatus === "all"
+            ? "รายการที่ต้องติดตามทั้งหมด"
+            : watchStatus === "low"
             ? "รายการต่ำกว่า Min"
             : watchStatus === "near"
             ? "รายการใกล้ต่ำกว่า Min"
             : "รายการเกิน Max"
         }
-        subtitle={`ทั้งหมด ${watchCounts[watchStatus] ?? 0} รายการ`}
+        subtitle={`ทั้งหมด ${watchStatus === "all" ? watchlist.length : watchCounts[watchStatus] ?? 0} รายการ`}
         icon={
-          watchStatus === "over" ? (
+          watchStatus === "all" ? (
+            <ListChecks className="h-8 w-8 shrink-0 text-red-600" />
+          ) : watchStatus === "over" ? (
             <ArrowUpCircle className="h-8 w-8 shrink-0 text-[#b3540c]" />
           ) : watchStatus === "near" ? (
             <AlertTriangle className="h-8 w-8 shrink-0 text-amber-500" />
@@ -971,7 +1053,7 @@ export default function AVDCDashboard() {
       >
         <div className="space-y-2.5">
           {watchlist
-            .filter((w) => w.status === watchStatus)
+            .filter((w) => (watchStatus === "all" ? true : w.status === watchStatus))
             .map((w, idx) => {
               const s = STATUS[w.status];
               return (
@@ -1025,7 +1107,9 @@ export default function AVDCDashboard() {
                 </div>
               );
             })}
-          {watchCounts[watchStatus] === 0 && <p className="py-6 text-center text-sm text-slate-400">ไม่มีรายการในกลุ่มนี้</p>}
+          {(watchStatus === "all" ? watchlist.length : watchCounts[watchStatus]) === 0 && (
+            <p className="py-6 text-center text-sm text-slate-400">ไม่มีรายการในกลุ่มนี้</p>
+          )}
         </div>
       </DetailModal>
 
