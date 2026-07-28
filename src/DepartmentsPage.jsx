@@ -58,6 +58,10 @@ function DeptLotRow({ lot, minMax, onDone, warehouseDept, isWarehouseView }) {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [returning, setReturning] = useState(false);
+  const [returnMode, setReturnMode] = useState(false);
+  const [returnQty, setReturnQty] = useState(String(lot.quantity ?? ""));
+  const [returnStaff, setReturnStaff] = useState("");
+  const [returnError, setReturnError] = useState(null);
   const [error, setError] = useState(null);
 
   const mm = minMax[lot.drug_name] || {};
@@ -125,14 +129,31 @@ function DeptLotRow({ lot, minMax, onDone, warehouseDept, isWarehouseView }) {
     onDone?.();
   }
 
+  function startReturn() {
+    setReturnQty(String(lot.quantity ?? ""));
+    setReturnStaff("");
+    setReturnError(null);
+    setReturnMode(true);
+  }
+
   async function handleReturn() {
+    setReturnError(null);
     if (!warehouseDept?.id) {
       alertError("ไม่พบข้อมูลคลังยา ไม่สามารถคืนของได้");
       return;
     }
+    const qtyNum = Number(returnQty);
+    if (!returnQty || Number.isNaN(qtyNum) || qtyNum <= 0) {
+      setReturnError("กรุณาระบุจำนวนที่จะคืนให้ถูกต้อง");
+      return;
+    }
+    if (qtyNum > lot.quantity) {
+      setReturnError(`คืนได้ไม่เกินจำนวนคงเหลือ (${lot.quantity})`);
+      return;
+    }
     const ok = await confirmAction({
       title: "คืนยาเข้าคลังยา?",
-      text: `${lot.drug_name} (Lot ${lot.lot}) จำนวน ${lot.quantity} จะถูกโอนกลับไปที่ "คลังยา" (ใช้เมื่อเติมยาผิดหรือเกิน)`,
+      text: `${lot.drug_name} (Lot ${lot.lot}) จำนวน ${qtyNum} จาก ${lot.quantity} จะถูกโอนกลับไปที่ "คลังยา" (ใช้เมื่อเติมยาผิดหรือเกิน)`,
       confirmText: "คืนเลย",
     });
     if (!ok) return;
@@ -142,17 +163,18 @@ function DeptLotRow({ lot, minMax, onDone, warehouseDept, isWarehouseView }) {
       lot: lot.lot,
       departmentId: lot.department_id,
       warehouseDepartmentId: warehouseDept.id,
-      qty: lot.quantity,
+      qty: qtyNum,
       mfgDate: lot.mfg_date,
       expDate: lot.exp_date,
-      staffName: null,
+      staffName: returnStaff || null,
     });
     setReturning(false);
     if (err) {
       alertError(err.message);
       return;
     }
-    alertSuccess(`คืน ${lot.drug_name} (Lot ${lot.lot}) จำนวน ${lot.quantity} เข้าคลังยาเรียบร้อยแล้ว`);
+    setReturnMode(false);
+    alertSuccess(`คืน ${lot.drug_name} (Lot ${lot.lot}) จำนวน ${qtyNum} เข้าคลังยาเรียบร้อยแล้ว`);
     onDone?.();
   }
 
@@ -184,6 +206,47 @@ function DeptLotRow({ lot, minMax, onDone, warehouseDept, isWarehouseView }) {
   }
 
   const isExpiringSoon = lot.exp_date && new Date(lot.exp_date) - new Date() < 90 * 24 * 60 * 60 * 1000;
+
+  if (returnMode) {
+    return (
+      <tr className="border-t border-slate-100 bg-blue-50/40 text-sm">
+        <td colSpan={9} className="p-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="text-xs font-medium text-slate-500">
+              <span className="font-semibold text-slate-700">{lot.drug_name}</span> (Lot {lot.lot}) — คงเหลือในหน่วยงาน {lot.quantity}
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-500">จำนวนที่จะคืน</label>
+              <input
+                type="number"
+                min="1"
+                max={lot.quantity}
+                value={returnQty}
+                onChange={(e) => setReturnQty(e.target.value)}
+                className="w-28 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                autoFocus
+              />
+            </div>
+            <div className="min-w-[180px]">
+              <label className="mb-1 block text-xs font-medium text-slate-500">ผู้บันทึก</label>
+              <StaffAutocomplete value={returnStaff} onChange={setReturnStaff} />
+            </div>
+            <button
+              onClick={handleReturn}
+              disabled={returning}
+              className="flex items-center gap-1.5 rounded-lg bg-[#2f8fdc] px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
+            >
+              {returning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Undo2 className="h-3.5 w-3.5" />} ยืนยันคืนคลัง
+            </button>
+            <button onClick={() => setReturnMode(false)} className="flex items-center gap-1 text-xs font-medium text-slate-400 underline">
+              <X className="h-3.5 w-3.5" /> ยกเลิก
+            </button>
+          </div>
+          {returnError && <p className="mt-2 text-xs font-medium text-red-500">{returnError}</p>}
+        </td>
+      </tr>
+    );
+  }
 
   if (editing) {
     return (
@@ -258,7 +321,7 @@ function DeptLotRow({ lot, minMax, onDone, warehouseDept, isWarehouseView }) {
           </button>
           {!isWarehouseView && (
             <button
-              onClick={handleReturn}
+              onClick={startReturn}
               disabled={returning}
               className="flex items-center gap-1 rounded-lg bg-blue-50 px-2 py-1.5 text-[11px] font-semibold text-[#2f8fdc] transition hover:bg-blue-100 disabled:opacity-50"
               title="คืนยาเข้าคลังยา"
