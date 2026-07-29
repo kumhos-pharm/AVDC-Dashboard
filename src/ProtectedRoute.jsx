@@ -6,10 +6,8 @@ import { useAuth, ROLE_LABELS } from "./AuthContext";
  * ครอบ route ที่ต้องล็อกอินก่อนถึงจะเข้าได้
  * - allowedRoles: array ของ role ที่อนุญาต เช่น ["admin", "pharmacist"]
  *   ถ้าไม่ระบุ (undefined) = แค่ต้องล็อกอิน ไม่จำกัดบทบาท
- * - loginPath: หน้า login ที่จะเด้งไปถ้ายังไม่ได้ล็อกอิน (ค่าเริ่มต้น "/login")
- *   ใช้แยกหน้า login ของโซนบันทึกจ่ายยา กับโซน Admin ออกจากกัน
  */
-export default function ProtectedRoute({ children, allowedRoles, loginPath = "/login" }) {
+export default function ProtectedRoute({ children, allowedRoles }) {
   const { session, profile, loading } = useAuth();
   const location = useLocation();
 
@@ -21,9 +19,9 @@ export default function ProtectedRoute({ children, allowedRoles, loginPath = "/l
     );
   }
 
-  // ยังไม่ล็อกอิน -> เด้งไปหน้า login ของโซนนี้ พร้อมจำหน้าที่ตั้งใจจะเข้าไว้ (redirect กลับมาหลังล็อกอินสำเร็จ)
+  // ยังไม่ล็อกอิน -> เด้งไปหน้า login พร้อมจำหน้าที่ตั้งใจจะเข้าไว้ (redirect กลับมาหลังล็อกอินสำเร็จ)
   if (!session) {
-    return <Navigate to={loginPath} replace state={{ from: location }} />;
+    return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
   const role = profile?.role;
