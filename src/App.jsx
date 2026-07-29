@@ -39,7 +39,7 @@ const PAGE_TITLES = {
   "/admin/departments": "หน่วยงาน | AVDC",
   "/admin/reports": "รายงาน | AVDC",
   "/admin/users": "ผู้ใช้งานระบบ | AVDC",
-  "/login": "เข้าสู่ระบบ | AVDC",
+  "/login": "เข้าสู่ระบบ | AVDC DASHBOARD",
 };
 
 function PageTitle() {
