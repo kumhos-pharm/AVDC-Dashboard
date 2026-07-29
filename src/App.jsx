@@ -9,7 +9,16 @@ import StaffPage from "./StaffPage";
 import DrugsPage from "./DrugsPage";
 import DepartmentsPage from "./DepartmentsPage";
 import ReportsPage from "./ReportsPage";
+import UsersPage from "./UsersPage";
 import Sidebar from "./Sidebar";
+import { AuthProvider, ROLES } from "./AuthContext";
+import LoginPage from "./LoginPage";
+import ProtectedRoute from "./ProtectedRoute";
+
+// ตารางสิทธิ์: หน้าไหนในโซน /admin เปิดให้บทบาทใดบ้าง (undefined = แค่ล็อกอินก็เข้าได้ ไม่จำกัดบทบาท)
+const ADMIN_ROLES_ALL = [ROLES.ADMIN];
+const ADMIN_ROLES_PHARMACIST = [ROLES.ADMIN, ROLES.PHARMACIST];
+const ADMIN_ROLES_DASHBOARD = [ROLES.ADMIN, ROLES.PHARMACIST, ROLES.NURSE];
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -29,6 +38,8 @@ const PAGE_TITLES = {
   "/admin/staff": "เจ้าหน้าที่ | AVDC",
   "/admin/departments": "หน่วยงาน | AVDC",
   "/admin/reports": "รายงาน | AVDC",
+  "/admin/users": "ผู้ใช้งานระบบ | AVDC",
+  "/login": "เข้าสู่ระบบ | AVDC",
 };
 
 function PageTitle() {
@@ -62,7 +73,7 @@ function Landing() {
         </Link>
       </div>
       <p className="max-w-md text-xs text-slate-400">
-        หมายเหตุ: ตอนนี้ยังไม่มีระบบล็อกอินแยกสิทธิ์ — การแยกลิงก์นี้เป็นเพียงการแยก URL เท่านั้น
+        หน้า "ระบบจัดการ (Admin)" ต้องเข้าสู่ระบบก่อนใช้งาน และจะแสดงเฉพาะเมนูที่ตรงกับสิทธิ์ของผู้ใช้แต่ละคน
       </p>
     </div>
   );
@@ -71,60 +82,87 @@ function Landing() {
 export default function App() {
   return (
     <BrowserRouter>
-      <ScrollToTop />
-      <PageTitle />
-      <Routes>
-        <Route path="/" element={<Landing />} />
-        <Route path="/dispense" element={<DispensePage />} />
-        <Route
-          path="/admin/dashboard"
-          element={
-            <AdminShell>
-              <AVDCDashboard />
-            </AdminShell>
-          }
-        />
-        <Route
-          path="/admin/warehouse"
-          element={
-            <AdminShell>
-              <WarehousePage />
-            </AdminShell>
-          }
-        />
-        <Route
-          path="/admin/drugs"
-          element={
-            <AdminShell>
-              <DrugsPage />
-            </AdminShell>
-          }
-        />
-        <Route
-          path="/admin/staff"
-          element={
-            <AdminShell>
-              <StaffPage />
-            </AdminShell>
-          }
-        />
-        <Route
-          path="/admin/departments"
-          element={
-            <AdminShell>
-              <DepartmentsPage />
-            </AdminShell>
-          }
-        />
-        <Route
-          path="/admin/reports"
-          element={
-            <AdminShell>
-              <ReportsPage />
-            </AdminShell>
-          }
-        />
-      </Routes>
+      <AuthProvider>
+        <ScrollToTop />
+        <PageTitle />
+        <Routes>
+          <Route path="/" element={<Landing />} />
+          {/* หน้าบันทึกจ่ายยา — ยังไม่กำหนดสิทธิ์ ใช้งานได้โดยไม่ต้องล็อกอิน */}
+          <Route path="/dispense" element={<DispensePage />} />
+          <Route path="/login" element={<LoginPage />} />
+
+          <Route
+            path="/admin/dashboard"
+            element={
+              <ProtectedRoute allowedRoles={ADMIN_ROLES_DASHBOARD}>
+                <AdminShell>
+                  <AVDCDashboard />
+                </AdminShell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/warehouse"
+            element={
+              <ProtectedRoute allowedRoles={ADMIN_ROLES_PHARMACIST}>
+                <AdminShell>
+                  <WarehousePage />
+                </AdminShell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/drugs"
+            element={
+              <ProtectedRoute allowedRoles={ADMIN_ROLES_PHARMACIST}>
+                <AdminShell>
+                  <DrugsPage />
+                </AdminShell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/staff"
+            element={
+              <ProtectedRoute allowedRoles={ADMIN_ROLES_ALL}>
+                <AdminShell>
+                  <StaffPage />
+                </AdminShell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/departments"
+            element={
+              <ProtectedRoute allowedRoles={ADMIN_ROLES_ALL}>
+                <AdminShell>
+                  <DepartmentsPage />
+                </AdminShell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/reports"
+            element={
+              <ProtectedRoute allowedRoles={ADMIN_ROLES_PHARMACIST}>
+                <AdminShell>
+                  <ReportsPage />
+                </AdminShell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/users"
+            element={
+              <ProtectedRoute allowedRoles={ADMIN_ROLES_ALL}>
+                <AdminShell>
+                  <UsersPage />
+                </AdminShell>
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </AuthProvider>
     </BrowserRouter>
   );
 }
