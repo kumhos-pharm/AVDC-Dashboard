@@ -7,7 +7,11 @@ import { useAuth } from "./AuthContext";
 const NAVY = "#0d2a63";
 const BLUE = "#2f8fdc";
 
-export default function LoginPage() {
+export default function LoginPage({
+  title = "ระบบจัดการ AVDC Dashboard",
+  subtitle = "กลุ่มงานเภสัชกรรม รพ.กุมภวาปี",
+  defaultRedirect = "/admin/dashboard",
+}) {
   const { session, loading: authLoading, signIn } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -18,9 +22,9 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  // ถ้าล็อกอินอยู่แล้ว ไม่ต้องมาหน้านี้ซ้ำ — เด้งกลับไปหน้าที่ตั้งใจจะเข้าตั้งแต่แรก (หรือ dashboard)
+  // ถ้าล็อกอินอยู่แล้ว ไม่ต้องมาหน้านี้ซ้ำ — เด้งกลับไปหน้าที่ตั้งใจจะเข้าตั้งแต่แรก (หรือปลายทางเริ่มต้นของโซนนี้)
   if (!authLoading && session) {
-    const redirectTo = location.state?.from?.pathname || "/admin/dashboard";
+    const redirectTo = location.state?.from?.pathname || defaultRedirect;
     return <Navigate to={redirectTo} replace />;
   }
 
@@ -46,7 +50,7 @@ export default function LoginPage() {
       return;
     }
 
-    const redirectTo = location.state?.from?.pathname || "/admin/dashboard";
+    const redirectTo = location.state?.from?.pathname || defaultRedirect;
     navigate(redirectTo, { replace: true });
   }
 
@@ -57,9 +61,9 @@ export default function LoginPage() {
         <div className="mb-10 flex flex-col items-center gap-1 text-center">
           <img src={avdcLogo} alt="AVDC Logo" className="mb-4 h-24 w-24 rounded-2xl object-contain shadow-sm" />
           <h1 className="text-2xl font-bold leading-snug" style={{ color: NAVY }}>
-            ระบบจัดการ AVDC Dashboard
+            {title}
           </h1>
-          <p className="text-sm font-medium text-slate-500">กลุ่มงานเภสัชกรรม รพ.กุมภวาปี</p>
+          <p className="text-sm font-medium text-slate-500">{subtitle}</p>
           <div className="mt-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-400">
             <span className="h-px w-6 bg-slate-300" />
             เข้าสู่ระบบสำหรับเจ้าหน้าที่
