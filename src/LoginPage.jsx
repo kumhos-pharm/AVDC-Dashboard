@@ -5,6 +5,7 @@ import avdcLogo from "./assets/avdc-logo.png";
 import { useAuth } from "./AuthContext";
 
 const NAVY = "#0d2a63";
+const BLUE = "#2f8fdc";
 
 export default function LoginPage() {
   const { session, loading: authLoading, signIn } = useAuth();
@@ -52,13 +53,18 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen w-full items-center justify-center bg-[#eef1f6] p-6">
       <div className="w-full max-w-md">
-        <div className="mb-10 flex flex-col items-center gap-4 text-center">
-          <img src={avdcLogo} alt="AVDC Logo" className="h-28 w-28 rounded-2xl object-contain" />
-          <h1 className="text-2xl font-bold" style={{ color: NAVY }}>
-         ระบบจัดการ AVDC Dashboard
+        {/* โลโก้ + ชื่อระบบ + หน่วยงาน — จัดลำดับความสำคัญของตัวอักษรใหม่ให้อ่านง่ายเป็นขั้นบันได */}
+        <div className="mb-10 flex flex-col items-center gap-1 text-center">
+          <img src={avdcLogo} alt="AVDC Logo" className="mb-4 h-24 w-24 rounded-2xl object-contain shadow-sm" />
+          <h1 className="text-2xl font-bold leading-snug" style={{ color: NAVY }}>
+            ระบบจัดการ AVDC Dashboard
           </h1>
-          <p className="text-xs text-slate-400">กลุ่มงานเภสัชกรรม รพ.กุมภวาปี</p>
-          <p className="text-sm text-slate-400">เข้าสู่ระบบสำหรับเจ้าหน้าที่</p>
+          <p className="text-sm font-medium text-slate-500">กลุ่มงานเภสัชกรรม รพ.กุมภวาปี</p>
+          <div className="mt-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-400">
+            <span className="h-px w-6 bg-slate-300" />
+            เข้าสู่ระบบสำหรับเจ้าหน้าที่
+            <span className="h-px w-6 bg-slate-300" />
+          </div>
         </div>
 
         <form
@@ -79,23 +85,23 @@ export default function LoginPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="name@hospital.go.th"
-            className="mb-5 w-full rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3.5 text-base outline-none focus:border-[#2f8fdc] focus:bg-white focus:ring-4 focus:ring-blue-50"
+            className="mb-5 w-full rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3.5 text-base text-slate-800 outline-none placeholder:text-slate-400 focus:border-[#2f8fdc] focus:bg-white focus:ring-4 focus:ring-blue-50"
           />
 
           <label className="mb-2 block text-sm font-semibold text-slate-600">รหัสผ่าน</label>
-          <div className="relative mb-6">
+          <div className="relative mb-2">
             <input
               type={showPassword ? "text" : "password"}
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="w-full rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3.5 pr-11 text-base outline-none focus:border-[#2f8fdc] focus:bg-white focus:ring-4 focus:ring-blue-50"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3.5 pr-11 text-base text-slate-800 outline-none placeholder:text-slate-400 focus:border-[#2f8fdc] focus:bg-white focus:ring-4 focus:ring-blue-50"
             />
             <button
               type="button"
               onClick={() => setShowPassword((v) => !v)}
-              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 transition-colors hover:text-slate-600"
               tabIndex={-1}
             >
               {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
@@ -105,15 +111,18 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#2f8fdc] px-4 py-3.5 text-base font-semibold text-white shadow-sm transition-colors hover:bg-[#2a7ec2] disabled:cursor-not-allowed disabled:opacity-60"
+            className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3.5 text-base font-semibold text-white shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+            style={{ backgroundColor: BLUE }}
+            onMouseEnter={(e) => !submitting && (e.currentTarget.style.backgroundColor = "#2a7ec2")}
+            onMouseLeave={(e) => !submitting && (e.currentTarget.style.backgroundColor = BLUE)}
           >
             {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : <LogIn className="h-5 w-5" />}
             {submitting ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
           </button>
         </form>
 
-        <p className="mt-5 text-center text-sm text-slate-400">
-          ยังไม่มีบัญชีผู้ใช้? ติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์เข้าใช้งาน
+        <p className="mt-6 text-center text-sm text-slate-400">
+          ยังไม่มีบัญชีผู้ใช้? <span className="font-medium text-slate-500">ติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์เข้าใช้งาน</span>
         </p>
       </div>
     </div>
