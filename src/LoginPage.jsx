@@ -55,8 +55,9 @@ export default function LoginPage() {
         <div className="mb-10 flex flex-col items-center gap-4 text-center">
           <img src={avdcLogo} alt="AVDC Logo" className="h-28 w-28 rounded-2xl object-contain" />
           <h1 className="text-2xl font-bold" style={{ color: NAVY }}>
-            ระบบจัดการ AVDC
+         ระบบจัดการ AVDC Dashboard
           </h1>
+          <p className="text-xs text-slate-400">กลุ่มงานเภสัชกรรม รพ.กุมภวาปี</p>
           <p className="text-sm text-slate-400">เข้าสู่ระบบสำหรับเจ้าหน้าที่</p>
         </div>
 
