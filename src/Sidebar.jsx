@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Home, ListChecks, Building2, Warehouse, Users, FileText, Info, ShieldCheck, UserCog, LogOut } from "lucide-react";
+import { Home, ListChecks, Building2, Warehouse, Users, FileText, ShieldCheck, UserCog, LogOut } from "lucide-react";
 import { useAuth, ROLES, ROLE_LABELS } from "./AuthContext";
 
 const NAVY = "#0d2a63";
@@ -100,7 +100,6 @@ export default function Sidebar() {
               <span className="text-[9px] text-blue-100/70">{ROLE_LABELS[role] || "ไม่มีสิทธิ์"}</span>
             </div>
           )}
-          <NavItem icon={Info} label="ข้อมูลเพิ่มเติม" />
           <NavItem icon={LogOut} label="ออกจากระบบ" onClick={handleLogout} />
         </div>
       </aside>
