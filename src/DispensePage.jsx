@@ -163,9 +163,9 @@ export default function DispensePage() {
 
 
         {/* ================= ส่วนฟอร์มและประวัติ (Workspace) ================= */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 items-start">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 items-stretch">
           {/* ฟอร์มจ่ายยา */}
-          <div className="lg:col-span-5 xl:col-span-5">
+          <div className="lg:col-span-5 xl:col-span-5 h-full">
             <DispenseForm
               editingRow={editingRow}
               onCancelEdit={() => setEditingRow(null)}
@@ -177,7 +177,7 @@ export default function DispensePage() {
           </div>
 
           {/* ประวัติการจ่ายยา */}
-          <div className="lg:col-span-7 xl:col-span-7">
+          <div className="lg:col-span-7 xl:col-span-7 h-full">
             <DispenseHistory
               refreshKey={refreshKey}
               editingId={editingRow?.id}

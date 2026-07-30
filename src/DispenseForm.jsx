@@ -727,7 +727,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
   };
 
   return (
-    <div className="rounded-2xl border-2 border-[#007bff]/40 bg-white p-4 sm:p-6 md:p-7 shadow-[0_2px_16px_-4px_rgba(15,23,42,0.08)] font-['Kanit'] w-full max-w-xl mx-auto relative md:min-h-[700px] flex flex-col justify-between">
+    <div className="rounded-2xl border-2 border-[#007bff]/40 bg-white p-4 sm:p-6 md:p-7 shadow-[0_2px_16px_-4px_rgba(15,23,42,0.08)] font-['Kanit'] w-full max-w-xl mx-auto relative h-full flex flex-col justify-between">
       
       <form onSubmit={handleSubmit} className="space-y-4 flex-grow">
         
