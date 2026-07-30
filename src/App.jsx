@@ -126,6 +126,7 @@ export default function App() {
                 title="ระบบจัดการ AVDC Dashboard"
                 subtitle="กลุ่มงานเภสัชกรรม รพ.กุมภวาปี"
                 defaultRedirect="/admin/dashboard"
+                usernameMode
               />
             }
           />
