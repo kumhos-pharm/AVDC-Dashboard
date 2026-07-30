@@ -1,5 +1,6 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Home, ListChecks, Building2, Warehouse, Users, FileText, ShieldCheck, UserCog, LogOut } from "lucide-react";
+import Swal from "sweetalert2";
 import { useAuth, ROLES, ROLE_LABELS } from "./AuthContext";
 
 const NAVY = "#0d2a63";
@@ -76,8 +77,31 @@ export default function Sidebar() {
   const navLinks = ALL_NAV_LINKS.filter((item) => !item.roles || (role && item.roles.includes(role)));
 
   async function handleLogout() {
+    const result = await Swal.fire({
+      icon: "question",
+      title: "ออกจากระบบ?",
+      text: "ต้องการออกจากระบบจัดการ AVDC Dashboard ใช่หรือไม่",
+      showCancelButton: true,
+      confirmButtonText: "ออกจากระบบ",
+      cancelButtonText: "ยกเลิก",
+      confirmButtonColor: "#dc2626",
+      cancelButtonColor: "#64748b",
+      reverseButtons: true,
+    });
+
+    if (!result.isConfirmed) return;
+
     await signOut();
-    navigate("/login", { replace: true });
+    // แก้บั๊ก: เดิม navigate ไป "/login" (หน้า login โซนจ่ายยา) ทั้งที่ Sidebar นี้อยู่ในโซน Admin
+    // ต้องกลับไป "/admin/login" ถึงจะถูกโซน
+    navigate("/admin/login", { replace: true });
+
+    Swal.fire({
+      icon: "success",
+      title: "ออกจากระบบแล้ว",
+      timer: 1200,
+      showConfirmButton: false,
+    });
   }
 
   return (
