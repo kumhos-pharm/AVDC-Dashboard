@@ -126,8 +126,8 @@ export default function App() {
             element={
               <LoginPage
                 title="ระบบจัดการ AVDC Dashboard"
-                subtitle2="ศูนย์ Antidote & Vital Drug Center"
-                subtitle="กลุ่มงานเภสัชกรรม รพ.กุมภวาปี"
+                subtitle="ศูนย์ Antidote & Vital Drug Center"
+                subtitle2="กลุ่มงานเภสัชกรรม รพ.กุมภวาปี"
                 defaultRedirect="/admin/dashboard"
                 usernameMode
                 tagline={null}
