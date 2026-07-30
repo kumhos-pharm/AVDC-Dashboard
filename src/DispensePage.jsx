@@ -1,16 +1,24 @@
 import React, { useState, useEffect } from "react";
 import DispenseForm from "./DispenseForm";
 import DispenseHistory from "./DispenseHistory";
-import { RefreshCw, Calendar, Pill, Database } from "lucide-react";
+import { RefreshCw, Calendar, Pill, Database, LogOut, UserCircle2 } from "lucide-react";
 import avdcLogo from "./assets/avdc-logo.png";
+import { useAuth } from "./AuthContext";
 
 export default function DispensePage() {
+  const { profile, signOut } = useAuth();
   const [refreshKey, setRefreshKey] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [currentDateTime, setCurrentDateTime] = useState("");
 
   // แถวจากประวัติที่กำลังถูกแก้ไขอยู่ (null = ไม่ได้แก้ไข, ฟอร์มอยู่ในโหมดจ่ายยาใหม่ตามปกติ)
   const [editingRow, setEditingRow] = useState(null);
+
+  const handleLogout = async () => {
+    if (window.confirm("ต้องการออกจากระบบหน้าบันทึกจ่ายยาใช่หรือไม่?")) {
+      await signOut();
+    }
+  };
 
   // ฟังก์ชันจัดฟอร์แมตวันเวลาภาษาไทยให้สวยงามและเป็นปัจจุบันจริง
   const updateDateTime = () => {
@@ -109,6 +117,26 @@ export default function DispensePage() {
               title="รีเฟรชข้อมูล"
             >
               <RefreshCw className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* ผู้ใช้ที่ล็อกอินอยู่ + ปุ่มออกจากระบบ (เฉพาะโซนหน้าจ่ายยา ไม่กระทบ session ฝั่ง Admin) */}
+          <div className="flex items-center gap-2 rounded-xl bg-white/70 backdrop-blur-sm border border-white px-3 py-2 self-stretch md:self-auto justify-between md:justify-start shadow-sm">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="p-2 rounded-lg bg-green-50 text-[#198754] shrink-0">
+                <UserCircle2 className="h-5 w-5" />
+              </div>
+              <span className="text-sm font-bold text-slate-700 truncate max-w-[140px]">
+                {profile?.full_name || "เจ้าหน้าที่จ่ายยา"}
+              </span>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 rounded-lg bg-red-50 px-3 py-2 text-sm font-bold text-red-600 border border-red-100 hover:bg-red-100 active:scale-95 transition-all shrink-0"
+              title="ออกจากระบบ"
+            >
+              <LogOut className="h-4 w-4" />
+              <span className="hidden sm:inline">ออกจากระบบ</span>
             </button>
           </div>
 
