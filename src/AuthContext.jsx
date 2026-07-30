@@ -16,7 +16,13 @@ export const ROLE_LABELS = {
 
 const AuthContext = createContext(null);
 
-export function AuthProvider({ children }) {
+/**
+ * AuthProvider ของแต่ละ "โซน" (หน้าจ่ายยา / Admin)
+ * - authClient: client ของโซนนั้น (เก็บ session แยก storage key กันคนละโซน) ใช้ตอน signIn/signOut
+ * - เมื่อ session ของโซนเปลี่ยน จะ sync token เข้า client กลาง (supabase) เพื่อให้ query ข้อมูล
+ *   (ตาราง profiles, drugs, dispense_records ฯลฯ) ใช้สิทธิ์ของผู้ใช้ที่ล็อกอินอยู่ในโซนนี้ได้ถูกต้อง
+ */
+export function AuthProvider({ children, authClient }) {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null); // แถวจากตาราง profiles (name, role, ...)
   const [loading, setLoading] = useState(true); // กำลังเช็ค session/profile ตอนโหลดแอปครั้งแรก
@@ -35,21 +41,36 @@ export function AuthProvider({ children }) {
     setProfile(data);
   }, []);
 
+  // sync session ของโซนนี้เข้า client กลางที่ใช้ query ข้อมูลทั่วแอป (มีผลแค่ในแท็บ/หน้าปัจจุบันเท่านั้น
+  // ไม่กระทบ storage ของโซนอื่น เพราะ client กลางไม่ persist session ของตัวเอง)
+  const syncSharedClient = useCallback(async (nextSession) => {
+    if (nextSession) {
+      await supabase.auth.setSession({
+        access_token: nextSession.access_token,
+        refresh_token: nextSession.refresh_token,
+      });
+    } else {
+      await supabase.auth.signOut({ scope: "local" });
+    }
+  }, []);
+
   useEffect(() => {
     let mounted = true;
 
-    // ดึง session ปัจจุบันตอนเปิดแอป (ถ้าเคยล็อกอินไว้ จะยังคง login อยู่)
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    // ดึง session ปัจจุบันตอนเปิดแอป (ถ้าเคยล็อกอินไว้ในโซนนี้ จะยังคง login อยู่)
+    authClient.auth.getSession().then(async ({ data: { session } }) => {
       if (!mounted) return;
       setSession(session);
+      await syncSharedClient(session);
       if (session?.user) await loadProfile(session.user.id);
       setLoading(false);
     });
 
-    // ฟังการเปลี่ยนแปลงสถานะล็อกอิน (login/logout/refresh token)
-    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    // ฟังการเปลี่ยนแปลงสถานะล็อกอิน (login/logout/refresh token) เฉพาะของโซนนี้
+    const { data: listener } = authClient.auth.onAuthStateChange(async (_event, session) => {
       if (!mounted) return;
       setSession(session);
+      await syncSharedClient(session);
       if (session?.user) {
         await loadProfile(session.user.id);
       } else {
@@ -61,16 +82,19 @@ export function AuthProvider({ children }) {
       mounted = false;
       listener?.subscription?.unsubscribe();
     };
-  }, [loadProfile]);
+  }, [authClient, loadProfile, syncSharedClient]);
 
-  const signIn = useCallback(async (email, password) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    return { data, error };
-  }, []);
+  const signIn = useCallback(
+    async (email, password) => {
+      const { data, error } = await authClient.auth.signInWithPassword({ email, password });
+      return { data, error };
+    },
+    [authClient]
+  );
 
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
-  }, []);
+    await authClient.auth.signOut();
+  }, [authClient]);
 
   const value = {
     session,

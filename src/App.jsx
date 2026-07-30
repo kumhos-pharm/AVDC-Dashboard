@@ -1,7 +1,5 @@
 import { useEffect } from "react";
-import { BrowserRouter, Routes, Route, Link, useLocation } from "react-router-dom";
-import { PenSquare, LayoutDashboard } from "lucide-react";
-import avdcLogo from "./assets/avdc-logo.png";
+import { BrowserRouter, Routes, Route, Outlet, useLocation } from "react-router-dom";
 import DispensePage from "./DispensePage";
 import AVDCDashboard from "./AVDCDashboard";
 import WarehousePage from "./WarehousePage";
@@ -12,6 +10,7 @@ import ReportsPage from "./ReportsPage";
 import UsersPage from "./UsersPage";
 import Sidebar from "./Sidebar";
 import { AuthProvider, ROLES } from "./AuthContext";
+import { supabaseDispenseAuth, supabaseAdminAuth } from "./supabaseClient";
 import LoginPage from "./LoginPage";
 import ProtectedRoute from "./ProtectedRoute";
 
@@ -30,7 +29,7 @@ function ScrollToTop() {
 
 // ชื่อที่จะไปแสดงบนแท็บเบราว์เซอร์ (document.title) ของแต่ละหน้า
 const PAGE_TITLES = {
-  "/": "AVDC — ระบบ Antidote & Vital Drug",
+  "/": "ระบบบันทึกจ่ายยา Antidote & Vital Drug",
   "/dispense": "ระบบบันทึกจ่ายยา Antidote & Vital Drug",
   "/admin/dashboard": "AVDC DASHBOARD",
   "/admin/warehouse": "คลังยา | AVDC",
@@ -39,7 +38,8 @@ const PAGE_TITLES = {
   "/admin/departments": "หน่วยงาน | AVDC",
   "/admin/reports": "รายงาน | AVDC",
   "/admin/users": "ผู้ใช้งานระบบ | AVDC",
-  "/login": "เข้าสู่ระบบ | AVDC DASHBOARD",
+  "/login": "เข้าสู่ระบบบันทึกจ่ายยา | AVDC",
+  "/admin/login": "เข้าสู่ระบบจัดการ | AVDC",
 };
 
 function PageTitle() {
@@ -59,42 +59,80 @@ function AdminShell({ children }) {
   );
 }
 
-function Landing() {
+// โซนหน้าจ่ายยา: ล็อกอิน/ล็อกเอาท์แยกอิสระจากโซน Admin (คนละ client, คนละ storage key ในเบราว์เซอร์)
+function DispenseZone() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-[#eef1f6] p-6 text-center">
-      <img src={avdcLogo} alt="AVDC Logo" className="h-24 w-24 rounded-2xl object-contain" />
-      <h1 className="text-xl font-bold text-[#0d2a63]">AVDC — ระบบ Antidote &amp; Vital Drug</h1>
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <Link to="/dispense" className="flex items-center gap-2 rounded-xl bg-[#2f8fdc] px-6 py-3 font-semibold text-white shadow-sm hover:bg-[#2a7ec2]">
-          <PenSquare className="h-4 w-4" /> หน้าบันทึกจ่ายยา
-        </Link>
-        <Link to="/admin/dashboard" className="flex items-center gap-2 rounded-xl bg-[#0d2a63] px-6 py-3 font-semibold text-white shadow-sm hover:bg-[#0a1f4d]">
-          <LayoutDashboard className="h-4 w-4" /> ระบบจัดการ (Admin)
-        </Link>
-      </div>
-      <p className="max-w-md text-xs text-slate-400">
-        หน้า "ระบบจัดการ (Admin)" ต้องเข้าสู่ระบบก่อนใช้งาน และจะแสดงเฉพาะเมนูที่ตรงกับสิทธิ์ของผู้ใช้แต่ละคน
-      </p>
-    </div>
+    <AuthProvider authClient={supabaseDispenseAuth}>
+      <Outlet />
+    </AuthProvider>
+  );
+}
+
+// โซน Admin Dashboard: ล็อกอิน/ล็อกเอาท์แยกอิสระจากโซนหน้าจ่ายยา
+function AdminZone() {
+  return (
+    <AuthProvider authClient={supabaseAdminAuth}>
+      <Outlet />
+    </AuthProvider>
   );
 }
 
 export default function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <ScrollToTop />
-        <PageTitle />
-        <Routes>
-          <Route path="/" element={<Landing />} />
-          {/* หน้าบันทึกจ่ายยา — ยังไม่กำหนดสิทธิ์ ใช้งานได้โดยไม่ต้องล็อกอิน */}
-          <Route path="/dispense" element={<DispensePage />} />
-          <Route path="/login" element={<LoginPage />} />
+      <ScrollToTop />
+      <PageTitle />
+      <Routes>
+        {/* ===== โซนหน้าจ่ายยา — auth แยกอิสระจากโซน Admin ===== */}
+        <Route element={<DispenseZone />}>
+          {/* ตัดหน้าเลือกออก: เข้า root ก็เห็นหน้าบันทึกจ่ายยาทันที (ไม่ redirect เปลี่ยน URL) */}
+          {/* ต้องล็อกอินก่อนถึงจะบันทึก/แก้ไขรายการจ่ายยาได้ (ไม่จำกัดบทบาท ล็อกอินแล้วเข้าได้ทุกบทบาท) — ใช้หน้า login แยกของโซนนี้ */}
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute loginPath="/login">
+                <DispensePage />
+              </ProtectedRoute>
+            }
+          />
+          {/* คงพาธนี้ไว้เผื่อมีคนแชร์/บุ๊คมาร์คลิงก์เดิม */}
+          <Route
+            path="/dispense"
+            element={
+              <ProtectedRoute loginPath="/login">
+                <DispensePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/login"
+            element={
+              <LoginPage
+                title="ระบบบันทึกจ่ายยา AVDC"
+                subtitle="สำหรับเจ้าหน้าที่บันทึกจ่ายยา Antidote & Vital Drug"
+                defaultRedirect="/dispense"
+                usernameMode
+              />
+            }
+          />
+        </Route>
 
+        {/* ===== โซน Admin Dashboard — auth แยกอิสระจากโซนหน้าจ่ายยา ===== */}
+        <Route element={<AdminZone />}>
+          <Route
+            path="/admin/login"
+            element={
+              <LoginPage
+                title="ระบบจัดการ AVDC Dashboard"
+                subtitle="กลุ่มงานเภสัชกรรม รพ.กุมภวาปี"
+                defaultRedirect="/admin/dashboard"
+              />
+            }
+          />
           <Route
             path="/admin/dashboard"
             element={
-              <ProtectedRoute allowedRoles={ADMIN_ROLES_DASHBOARD}>
+              <ProtectedRoute allowedRoles={ADMIN_ROLES_DASHBOARD} loginPath="/admin/login">
                 <AdminShell>
                   <AVDCDashboard />
                 </AdminShell>
@@ -104,7 +142,7 @@ export default function App() {
           <Route
             path="/admin/warehouse"
             element={
-              <ProtectedRoute allowedRoles={ADMIN_ROLES_PHARMACIST}>
+              <ProtectedRoute allowedRoles={ADMIN_ROLES_PHARMACIST} loginPath="/admin/login">
                 <AdminShell>
                   <WarehousePage />
                 </AdminShell>
@@ -114,7 +152,7 @@ export default function App() {
           <Route
             path="/admin/drugs"
             element={
-              <ProtectedRoute allowedRoles={ADMIN_ROLES_PHARMACIST}>
+              <ProtectedRoute allowedRoles={ADMIN_ROLES_PHARMACIST} loginPath="/admin/login">
                 <AdminShell>
                   <DrugsPage />
                 </AdminShell>
@@ -124,7 +162,7 @@ export default function App() {
           <Route
             path="/admin/staff"
             element={
-              <ProtectedRoute allowedRoles={ADMIN_ROLES_ALL}>
+              <ProtectedRoute allowedRoles={ADMIN_ROLES_ALL} loginPath="/admin/login">
                 <AdminShell>
                   <StaffPage />
                 </AdminShell>
@@ -134,7 +172,7 @@ export default function App() {
           <Route
             path="/admin/departments"
             element={
-              <ProtectedRoute allowedRoles={ADMIN_ROLES_ALL}>
+              <ProtectedRoute allowedRoles={ADMIN_ROLES_ALL} loginPath="/admin/login">
                 <AdminShell>
                   <DepartmentsPage />
                 </AdminShell>
@@ -144,7 +182,7 @@ export default function App() {
           <Route
             path="/admin/reports"
             element={
-              <ProtectedRoute allowedRoles={ADMIN_ROLES_PHARMACIST}>
+              <ProtectedRoute allowedRoles={ADMIN_ROLES_PHARMACIST} loginPath="/admin/login">
                 <AdminShell>
                   <ReportsPage />
                 </AdminShell>
@@ -154,15 +192,15 @@ export default function App() {
           <Route
             path="/admin/users"
             element={
-              <ProtectedRoute allowedRoles={ADMIN_ROLES_ALL}>
+              <ProtectedRoute allowedRoles={ADMIN_ROLES_ALL} loginPath="/admin/login">
                 <AdminShell>
                   <UsersPage />
                 </AdminShell>
               </ProtectedRoute>
             }
           />
-        </Routes>
-      </AuthProvider>
+        </Route>
+      </Routes>
     </BrowserRouter>
   );
 }
