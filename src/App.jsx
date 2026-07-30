@@ -129,6 +129,7 @@ export default function App() {
                 subtitle="กลุ่มงานเภสัชกรรม รพ.กุมภวาปี"
                 defaultRedirect="/admin/dashboard"
                 usernameMode
+                tagline={null}
               />
             }
           />
