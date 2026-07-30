@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import DispenseForm from "./DispenseForm";
 import DispenseHistory from "./DispenseHistory";
 import { RefreshCw, Calendar, Pill, Database, LogOut, UserCircle2 } from "lucide-react";
+import Swal from "sweetalert2";
 import avdcLogo from "./assets/avdc-logo.png";
 import { useAuth } from "./AuthContext";
 
@@ -15,8 +16,26 @@ export default function DispensePage() {
   const [editingRow, setEditingRow] = useState(null);
 
   const handleLogout = async () => {
-    if (window.confirm("ต้องการออกจากระบบหน้าบันทึกจ่ายยาใช่หรือไม่?")) {
+    const result = await Swal.fire({
+      icon: "question",
+      title: "ออกจากระบบ?",
+      text: "ต้องการออกจากระบบหน้าบันทึกจ่ายยาใช่หรือไม่",
+      showCancelButton: true,
+      confirmButtonText: "ออกจากระบบ",
+      cancelButtonText: "ยกเลิก",
+      confirmButtonColor: "#dc2626",
+      cancelButtonColor: "#64748b",
+      reverseButtons: true,
+    });
+
+    if (result.isConfirmed) {
       await signOut();
+      Swal.fire({
+        icon: "success",
+        title: "ออกจากระบบแล้ว",
+        timer: 1200,
+        showConfirmButton: false,
+      });
     }
   };
 

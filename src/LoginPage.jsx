@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useLocation, Navigate } from "react-router-dom";
 import { LogIn, Loader2, Eye, EyeOff, AlertCircle } from "lucide-react";
+import Swal from "sweetalert2";
 import avdcLogo from "./assets/avdc-logo.png";
 import { useAuth } from "./AuthContext";
 
@@ -38,7 +39,12 @@ export default function LoginPage({
     setErrorMsg("");
 
     if (!email.trim() || !password) {
-      setErrorMsg(usernameMode ? "กรุณากรอกชื่อผู้ใช้และรหัสผ่านให้ครบ" : "กรุณากรอกอีเมลและรหัสผ่านให้ครบ");
+      const msg = usernameMode ? "กรุณากรอกชื่อผู้ใช้และรหัสผ่านให้ครบ" : "กรุณากรอกอีเมลและรหัสผ่านให้ครบ";
+      if (usernameMode) {
+        Swal.fire({ icon: "warning", title: "กรอกข้อมูลไม่ครบ", text: msg, confirmButtonColor: BLUE });
+      } else {
+        setErrorMsg(msg);
+      }
       return;
     }
 
@@ -51,18 +57,41 @@ export default function LoginPage({
     setSubmitting(false);
 
     if (error) {
-      setErrorMsg(
+      const friendlyMsg =
         error.message === "Invalid login credentials"
           ? usernameMode
             ? "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง"
             : "อีเมลหรือรหัสผ่านไม่ถูกต้อง"
-          : "เข้าสู่ระบบไม่สำเร็จ: " + error.message
-      );
+          : "เข้าสู่ระบบไม่สำเร็จ: " + error.message;
+
+      // หน้าจ่ายยา (usernameMode) ใช้ SweetAlert2 แจ้งเตือนแบบป๊อปอัพ ให้เจ้าหน้าที่หน้างานเห็นชัดเจนขึ้น
+      if (usernameMode) {
+        Swal.fire({
+          icon: "error",
+          title: "เข้าสู่ระบบไม่สำเร็จ",
+          text: friendlyMsg,
+          confirmButtonText: "ลองอีกครั้ง",
+          confirmButtonColor: BLUE,
+        });
+      } else {
+        setErrorMsg(friendlyMsg);
+      }
       return;
     }
 
     const redirectTo = location.state?.from?.pathname || defaultRedirect;
-    navigate(redirectTo, { replace: true });
+
+    if (usernameMode) {
+      // แจ้งเตือนสั้นๆ ว่าล็อกอินสำเร็จ แล้วค่อยพาไปหน้าจ่ายยา (ปิดเองอัตโนมัติ ไม่ต้องกดตกลง)
+      Swal.fire({
+        icon: "success",
+        title: "เข้าสู่ระบบสำเร็จ",
+        timer: 1200,
+        showConfirmButton: false,
+      }).then(() => navigate(redirectTo, { replace: true }));
+    } else {
+      navigate(redirectTo, { replace: true });
+    }
   }
 
   return (
@@ -86,7 +115,7 @@ export default function LoginPage({
           onSubmit={handleSubmit}
           className="rounded-3xl border border-slate-200/70 bg-white p-8 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_24px_-12px_rgba(15,23,42,0.12)]"
         >
-          {errorMsg && (
+          {!usernameMode && errorMsg && (
             <div className="mb-5 flex items-start gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">
               <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0" />
               <span>{errorMsg}</span>
