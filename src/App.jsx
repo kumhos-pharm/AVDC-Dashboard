@@ -110,8 +110,10 @@ export default function App() {
               <LoginPage
                 title="ระบบบันทึกจ่ายยา AVDC"
                 subtitle="สำหรับเจ้าหน้าที่บันทึกจ่ายยา Antidote & Vital Drug"
+                subtitle2="กลุ่มงานเภสัชกรรม รพ.กุมภวาปี"
                 defaultRedirect="/dispense"
                 usernameMode
+                tagline={null}
               />
             }
           />

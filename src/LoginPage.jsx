@@ -15,6 +15,8 @@ const USERNAME_DOMAIN = "avdc.local";
 export default function LoginPage({
   title = "ระบบจัดการ AVDC Dashboard",
   subtitle = "กลุ่มงานเภสัชกรรม รพ.กุมภวาปี",
+  subtitle2 = "", // บรรทัดที่ 2 (เสริม) ใต้ subtitle — เว้นว่างไว้ถ้าไม่ต้องการ
+  tagline = "เข้าสู่ระบบสำหรับเจ้าหน้าที่", // ข้อความคั่นเล็กๆ ใต้หัวเรื่อง — ส่ง "" หรือ null เพื่อซ่อน
   defaultRedirect = "/admin/dashboard",
   usernameMode = false, // true = ให้กรอกแค่ "ชื่อผู้ใช้" ไม่ต้องมี @... (ใช้กับหน้า login ของหน้าจ่ายยา)
 }) {
@@ -104,11 +106,14 @@ export default function LoginPage({
             {title}
           </h1>
           <p className="text-sm font-medium text-slate-500">{subtitle}</p>
-          <div className="mt-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-400">
-            <span className="h-px w-6 bg-slate-300" />
-            เข้าสู่ระบบสำหรับเจ้าหน้าที่
-            <span className="h-px w-6 bg-slate-300" />
-          </div>
+          {subtitle2 && <p className="text-sm font-medium text-slate-500">{subtitle2}</p>}
+          {tagline && (
+            <div className="mt-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-400">
+              <span className="h-px w-6 bg-slate-300" />
+              {tagline}
+              <span className="h-px w-6 bg-slate-300" />
+            </div>
+          )}
         </div>
 
         <form
