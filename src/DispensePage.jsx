@@ -101,9 +101,9 @@ export default function DispensePage() {
             </div>
             
             {/* ข้อความชื่อระบบ */}
-            <div>
-              <h1 className="text-xl md:text-2xl font-extrabold text-[#0056b3] tracking-tight leading-tight">
-                ระบบบันทึกจ่ายยา Antidote & Vital Drug 
+            <div className="min-w-0">
+              <h1 className="whitespace-nowrap text-[15px] xs:text-base sm:text-lg md:text-2xl font-extrabold text-[#0056b3] tracking-tight leading-tight">
+                ระบบบันทึกจ่ายยา Antidote & Vital Drug
               </h1>
               <p className="text-sm md:text-base font-bold text-slate-600 mt-0.5">
                 กลุ่มงานเภสัชกรรม รพ.กุมภวาปี
@@ -118,10 +118,10 @@ export default function DispensePage() {
                 <Calendar className="h-5 w-5" />
               </div>
               <div className="text-left">
-                <span className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider leading-none mb-1">
+                <span className="block whitespace-nowrap text-[11px] font-bold text-slate-400 uppercase tracking-wider leading-none mb-1">
                   วันที่และเวลาอัปเดตล่าสุด
                 </span>
-                <span className="block text-sm md:text-sm font-extrabold text-slate-700">
+                <span className="block whitespace-nowrap text-[13px] sm:text-sm font-extrabold text-slate-700">
                   {currentDateTime}
                 </span>
               </div>
