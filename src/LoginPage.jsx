@@ -135,7 +135,7 @@ export default function LoginPage({
             autoComplete="username"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder={usernameMode ? "เช่น pla01" : "name@hospital.go.th"}
+            placeholder=""
             className="mb-5 w-full rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3.5 text-base text-slate-800 outline-none placeholder:text-slate-400 focus:border-[#2f8fdc] focus:bg-white focus:ring-4 focus:ring-blue-50"
           />
 
