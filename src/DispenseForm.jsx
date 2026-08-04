@@ -4,6 +4,23 @@ import Swal from "sweetalert2";
 import { supabase } from "./supabaseClient"; // ปรับ path ตามโครงสร้างจริงของคุณ
 import { updateDispense } from "./useDispense";
 
+// คืนค่าวันที่และเวลาปัจจุบัน (ตามเวลาเครื่องผู้ใช้) ในรูปแบบที่ input type="date"/"time" ต้องการ
+// ใช้เป็นค่าตั้งต้นของฟอร์ม แทนการฝังวันที่/เวลาตายตัวไว้ในโค้ด
+const getCurrentDateStr = () => {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+const getCurrentTimeStr = () => {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, "0");
+  const mi = String(now.getMinutes()).padStart(2, "0");
+  return `${hh}:${mi}`;
+};
+
 // ตั้งค่าธีมสีของ SweetAlert ให้เข้ากับฟอนต์/โทนสีของระบบ
 const swalBase = {
   confirmButtonColor: "#007bff",
@@ -21,8 +38,8 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
     prefix: "",
     patientName: "",
     hn: "",
-    dispenseDate: "2026-07-16",
-    dispenseTime: "22:14",
+    dispenseDate: getCurrentDateStr(),
+    dispenseTime: getCurrentTimeStr(),
     staff: "",
     searchDrug: "",
     drugId: "",
@@ -337,8 +354,8 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
       prefix: "",
       patientName: "",
       hn: "",
-      dispenseDate: "2026-07-16",
-      dispenseTime: "22:14",
+      dispenseDate: getCurrentDateStr(),
+      dispenseTime: getCurrentTimeStr(),
       staff: "",
       searchDrug: "",
       drugId: "",
