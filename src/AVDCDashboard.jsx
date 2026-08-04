@@ -865,8 +865,8 @@ export default function AVDCDashboard() {
                   <Lightbulb className="h-4.5 w-4.5" /> ไม่พบยาในหน่วยงานของท่าน?
                 </p>
                 <p className="text-sm text-slate-600">โปรดติดต่อ ศูนย์ AVDC (Phar-OPD)</p>
-                <p className="text-base font-bold text-slate-800 mt-1">โทร. 042-33440 , 042-334412-3 ต่อ xxxx</p>
-                <p className="text-base font-bold text-slate-800 mt-1">มือถือ 000-0000000</p>
+                <p className="text-base font-bold text-slate-800 mt-1">โทร. 042-33440 , 042-334412-3 ต่อ 3101</p>
+                <p className="text-base font-bold text-slate-800 mt-1">มือถือ 063-2026622</p>
               </div>
 
               </div>
