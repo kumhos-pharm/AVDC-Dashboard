@@ -20,15 +20,15 @@ export function useAvdcData() {
     else setLoading(true);
     setError(null);
 
-    const [deptRes, gridRes, drugCountRes, lastUpdatedRes, lotsRes] = await Promise.all([
+    const [deptRes, gridRes, drugsRes, lastUpdatedRes, lotsRes] = await Promise.all([
       supabase.from("departments").select("*").order("sort_order"),
       supabase.from("v_dashboard_grid").select("*"),
-      supabase.from("drugs").select("*", { count: "exact", head: true }),
+      supabase.from("drugs").select("id, name"),
       supabase.from("v_last_updated").select("last_updated").single(),
       supabase.from("v_warehouse_lots").select("drug_name, strength, form, lot, exp_date, quantity, department_id"),
     ]);
 
-    const firstError = deptRes.error || gridRes.error || drugCountRes.error || lastUpdatedRes.error || lotsRes.error;
+    const firstError = deptRes.error || gridRes.error || drugsRes.error || lastUpdatedRes.error || lotsRes.error;
     if (firstError) {
       setError(firstError);
       setLoading(false);
@@ -39,25 +39,36 @@ export function useAvdcData() {
     const deptRows = deptRes.data ?? [];
     const gridRows = gridRes.data ?? [];
 
+    // ตาราง "drugs" คือ source of truth ของรายชื่อยาที่ยังใช้งานอยู่จริง (หน้าจัดการคลังยา/รายการยา ลบยาจากตารางนี้)
+    // ส่วน v_dashboard_grid / v_warehouse_lots เป็น view ที่ pivot มาจากตาราง lot/สต็อกซึ่งอ้างชื่อยาแบบ text
+    // ไม่ได้ผูกกับตาราง drugs โดยตรง ถ้ามี lot/สต็อกเก่าค้างอยู่ (แม้ยอด 0) หลังลบยาไปแล้ว ชื่อยานั้นจะยังโผล่ใน view
+    // จึงต้องกรองด้วย validDrugNames เพื่อไม่ให้ยาที่ถูกลบไปแล้วยังโชว์ในหน้าแดชบอร์ด/รายการยา
+    const validDrugNames = new Set((drugsRes.data ?? []).map((d) => d.name));
+
     // Pivot: drug_name -> { department_name: { quantity, min, max } }
     const byDrugMap = {};
     const order = [];
-    gridRows.forEach((r) => {
-      if (!byDrugMap[r.drug_name]) {
-        byDrugMap[r.drug_name] = {};
-        order.push(r.drug_name);
-      }
-      byDrugMap[r.drug_name][r.department_name] = {
-        quantity: r.quantity,
-        min: r.min_qty,
-        max: r.max_qty,
-      };
-    });
+    gridRows
+      .filter((r) => validDrugNames.has(r.drug_name))
+      .forEach((r) => {
+        if (!byDrugMap[r.drug_name]) {
+          byDrugMap[r.drug_name] = {};
+          order.push(r.drug_name);
+        }
+        byDrugMap[r.drug_name][r.department_name] = {
+          quantity: r.quantity,
+          min: r.min_qty,
+          max: r.max_qty,
+        };
+      });
+
+    // เฉพาะ lot ของยาที่ยังมีอยู่จริงในตาราง drugs เท่านั้น (กันยาที่ถูกลบไปแล้วแต่ lot เก่ายังค้าง)
+    const validLots = (lotsRes.data ?? []).filter((l) => validDrugNames.has(l.drug_name));
 
     // เก็บ "ความแรง" และ "รูปแบบยา" ของยาแต่ละตัวจากข้อมูล lot (มาจากตาราง drugs ผ่าน view v_warehouse_lots)
     const strengthByDrug = {};
     const formByDrug = {};
-    (lotsRes.data ?? []).forEach((l) => {
+    validLots.forEach((l) => {
       if (l.strength && !strengthByDrug[l.drug_name]) strengthByDrug[l.drug_name] = l.strength;
       if (l.form && !formByDrug[l.drug_name]) formByDrug[l.drug_name] = l.form;
     });
@@ -82,7 +93,9 @@ export function useAvdcData() {
       });
     });
 
-    const total = gridRows.reduce((sum, r) => sum + (r.quantity || 0), 0);
+    const total = gridRows
+      .filter((r) => validDrugNames.has(r.drug_name))
+      .reduce((sum, r) => sum + (r.quantity || 0), 0);
 
     // ยาใกล้หมดอายุ: เหลืออายุระหว่าง 0-90 วันเท่านั้น (ไม่รวมที่หมดอายุไปแล้ว) และต้องมีคงเหลือ > 0
     const deptNameById = {};
@@ -91,7 +104,7 @@ export function useAvdcData() {
     });
     const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
     const now = Date.now();
-    const expiring = (lotsRes.data ?? [])
+    const expiring = validLots
       .filter((l) => {
         if ((l.quantity ?? 0) <= 0 || !l.exp_date) return false;
         const msLeft = new Date(l.exp_date).getTime() - now;
@@ -111,7 +124,7 @@ export function useAvdcData() {
 
     // จัดกลุ่ม Lot ตามคู่ "ชื่อยา||หน่วยงาน" (เฉพาะที่ยังมีคงเหลือ) เรียงตามวันหมดอายุใกล้สุดก่อน — ใช้แสดงใน popup รายการที่ต้องติดตาม
     const lotsMap = {};
-    (lotsRes.data ?? [])
+    validLots
       .filter((l) => (l.quantity ?? 0) > 0)
       .forEach((l) => {
         const key = `${l.drug_name}||${deptNameById[l.department_id] || "-"}`;
@@ -124,7 +137,7 @@ export function useAvdcData() {
 
     setDepartments(deptRows);
     setDrugRows(pivoted);
-    setTotalDrugCount(drugCountRes.count ?? pivoted.length);
+    setTotalDrugCount((drugsRes.data ?? []).length);
     setTotalQuantity(total);
     setLastUpdated(lastUpdatedRes.data?.last_updated ?? null);
     setExpiringLots(expiring);
