@@ -107,6 +107,18 @@ export function useAvdcData() {
       });
     });
 
+    // ถ้ายาตัวไหนใน cell ใดไม่มีคงเหลือ (quantity เป็น 0 หรือ null) ให้ล้าง min/max ออก
+    // เพื่อไม่ให้แดชบอร์ดแสดงค่า Min/Max ที่ค้างอยู่สำหรับยาที่ไม่มีสต็อกจริง
+    pivoted.forEach((drug) => {
+      Object.values(drug.byDept).forEach((cell) => {
+        if (!cell) return;
+        if (!cell.quantity || cell.quantity <= 0) {
+          cell.min = null;
+          cell.max = null;
+        }
+      });
+    });
+
     const total = gridRows
       .filter((r) => validDrugNames.has(r.drug_name))
       .reduce((sum, r) => sum + (r.quantity || 0), 0);
