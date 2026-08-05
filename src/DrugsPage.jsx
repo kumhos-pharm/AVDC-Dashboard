@@ -1,18 +1,43 @@
 import React, { useMemo, useState } from "react";
-import { ListChecks, Search } from "lucide-react";
-import { useDrugList } from "./useDrugs";
+import { ListChecks, Search, Trash2, Loader2 } from "lucide-react";
+import { useDrugList, deleteDrug } from "./useDrugs";
+import { alertSuccess, alertError, confirmAction } from "./alert";
 
 const NAVY = "#0d2a63";
 
 export default function DrugsPage() {
-  const { drugs, loading } = useDrugList();
+  const { drugs, loading, reload } = useDrugList();
   const [search, setSearch] = useState("");
+  const [deletingId, setDeletingId] = useState(null);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     if (!term) return drugs;
     return drugs.filter((d) => d.name.toLowerCase().includes(term));
   }, [search, drugs]);
+
+  async function handleDelete(drug) {
+    const ok = await confirmAction({
+      title: "ยืนยันลบยานี้ออกจากระบบ?",
+      text: `"${drug.name}" จะถูกลบออกจากระบบถาวร จะไม่แสดงในหน้าแดชบอร์ดหรือรายการยาอีกต่อไป — ใช้เมื่อไม่มีการใช้ยานี้แล้วเท่านั้น (ถ้ายานี้ยังมีสต็อกค้างอยู่ในคลังยา ระบบจะลบไม่สำเร็จ ให้ไปเคลียร์สต็อกที่หน้า "คลังยา" ก่อน)`,
+      confirmText: "ลบเลย",
+      danger: true,
+    });
+    if (!ok) return;
+    setDeletingId(drug.id);
+    const { error } = await deleteDrug(drug.id);
+    setDeletingId(null);
+    if (error) {
+      alertError(
+        error.message?.includes("foreign key") || error.code === "23503"
+          ? `ลบไม่สำเร็จ: "${drug.name}" ยังมีสต็อก/ประวัติค้างอยู่ในคลังยา กรุณาเคลียร์สต็อกให้หมดที่หน้า "คลังยา" ก่อน แล้วค่อยลบที่นี่`
+          : error.message
+      );
+      return;
+    }
+    alertSuccess(`ลบ "${drug.name}" ออกจากระบบเรียบร้อยแล้ว`);
+    reload();
+  }
 
   return (
     <div className="min-h-screen w-full bg-[#eef1f6] p-4 md:p-6 xl:p-8">
@@ -24,7 +49,7 @@ export default function DrugsPage() {
           <div>
             <h1 className="text-xl font-bold" style={{ color: NAVY }}>รายการยา</h1>
             <p className="text-xs text-slate-400">
-              รายชื่อยา ความแรง และรูปแบบยาในระบบ (ดูอย่างเดียว — เพิ่ม/แก้ไข/ลบยาได้ที่เมนู "คลังยา")
+              รายชื่อยา ความแรง และรูปแบบยาในระบบ (เพิ่ม/แก้ไขได้ที่เมนู "คลังยา" — ลบยาที่เลิกใช้แล้วได้ที่นี่)
             </p>
           </div>
         </div>
@@ -52,6 +77,7 @@ export default function DrugsPage() {
                     <th className="px-6 py-3 text-left font-semibold">ชื่อยา</th>
                     <th className="px-3 py-3 text-left font-semibold">ความแรง</th>
                     <th className="px-3 py-3 text-left font-semibold">รูปแบบยา</th>
+                    <th className="px-3 py-3 text-center font-semibold">จัดการ</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -60,11 +86,25 @@ export default function DrugsPage() {
                       <td className="px-6 py-3.5 font-semibold text-slate-700">{d.name}</td>
                       <td className="px-3 py-3.5 text-slate-500">{d.strength || <span className="text-slate-300">ยังไม่ระบุ</span>}</td>
                       <td className="px-3 py-3.5 text-slate-500">{d.form || <span className="text-slate-300">ยังไม่ระบุ</span>}</td>
+                      <td className="px-3 py-3.5 text-center">
+                        <button
+                          onClick={() => handleDelete(d)}
+                          disabled={deletingId === d.id}
+                          title="ลบยานี้ออกจากระบบถาวร"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-500 disabled:opacity-50"
+                        >
+                          {deletingId === d.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </button>
+                      </td>
                     </tr>
                   ))}
                   {filtered.length === 0 && (
                     <tr>
-                      <td colSpan={3} className="py-10 text-center text-sm text-slate-400">ไม่พบยาที่ค้นหา</td>
+                      <td colSpan={4} className="py-10 text-center text-sm text-slate-400">ไม่พบยาที่ค้นหา</td>
                     </tr>
                   )}
                 </tbody>
