@@ -32,7 +32,30 @@ export function useWarehouseLots(departmentId, searchTerm) {
 // รับยาเข้าคลัง (change_qty ต้องเป็นค่าบวก)
 export async function receiveStock(payload) {
   const { error } = await supabase.from("stock_movements").insert({ ...payload, reason: "receive" });
-  return { error };
+  if (error) return { error };
+
+  // สร้างแถวใน drug_targets อัตโนมัติถ้ายังไม่มี
+  // เพื่อให้ยาที่รับเข้าใหม่โชว์ใน v_dashboard_grid / แดชบอร์ดได้ทันที
+  const { drug_id, department_id } = payload;
+  if (drug_id && department_id) {
+    const { data: existing } = await supabase
+      .from("drug_targets")
+      .select("id")
+      .eq("department_id", department_id)
+      .eq("drug_id", drug_id)
+      .maybeSingle();
+
+    if (!existing) {
+      await supabase.from("drug_targets").insert({
+        department_id,
+        drug_id,
+        min_qty: null,
+        max_qty: null,
+      });
+    }
+  }
+
+  return { error: null };
 }
 
 // ปรับยอดคงเหลือของ lot (แก้ไข) — บันทึกเป็นส่วนต่าง (movement) เพื่อให้ยอดคงเหลือใหม่ตรงตามที่ระบุ
