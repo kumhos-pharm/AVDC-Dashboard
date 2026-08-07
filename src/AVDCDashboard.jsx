@@ -30,7 +30,6 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { useAvdcData } from "./useAvdcData";
-import UsageInsights from "./UsageInsights";
 import avdcLogo from "./assets/avdc-logo.png";
 
 const NAVY = "#0d2a63";
@@ -479,11 +478,6 @@ export default function AVDCDashboard() {
           </div>
 
         </div>
-
-        {/* ========================================================================= */}
-        {/* 1.5 แนวโน้มการใช้ยา + Top 5 */}
-        {/* ========================================================================= */}
-        <UsageInsights />
 
         {/* ========================================================================= */}
         {/* 2. ส่วนข้อมูลอื่นๆ ตาราง และไซด์บาร์ */}
