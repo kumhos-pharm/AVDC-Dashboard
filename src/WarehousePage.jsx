@@ -4,8 +4,29 @@ import { Warehouse, Search, PackagePlus, Send, Loader2, Pencil, Trash2, X, XCirc
 import { useDrugsAndDepartments } from "./useDispense";
 import { useWarehouseLots, receiveStock, transferStock, removeStockLot, updateLotDetails, updateMinMax, useWarehouseMinMax, returnLotToWarehouse } from "./useWarehouse";
 import { findOrCreateDrug, updateDrug } from "./useDrugs";
-import StaffAutocomplete from "./StaffAutocomplete";
 import { alertSuccess, alertError, confirmAction } from "./alert";
+import { supabase } from "./supabaseClient";
+
+// ---- ดึงชื่อ-นามสกุลของผู้ใช้ที่ login อยู่จากตาราง profiles ----
+function useCurrentStaffName() {
+  const [staffName, setStaffName] = useState("");
+  useEffect(() => {
+    async function fetchName() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", user.id)
+        .single();
+      if (data?.full_name) {
+        setStaffName(data.full_name);
+      }
+    }
+    fetchName();
+  }, []);
+  return staffName;
+}
 
 const NAVY = "#0d2a63";
 
@@ -48,7 +69,7 @@ function StatusBadge({ qty, min, max }) {
 }
 
 // ---- ฟอร์มรับยาเข้าคลัง / แก้ไขรายการยา (ใช้ฟอร์มเดียวกัน สลับโหมดตาม editTarget) ----
-function ReceiveForm({ drugs, warehouseDeptId, onReceived, editTarget, minMaxByName, onSavedEdit, onCancelEdit }) {
+function ReceiveForm({ drugs, warehouseDeptId, onReceived, editTarget, minMaxByName, onSavedEdit, onCancelEdit, currentStaffName }) {
   const isEditing = !!editTarget;
 
   const [drugQuery, setDrugQuery] = useState("");
@@ -62,9 +83,14 @@ function ReceiveForm({ drugs, warehouseDeptId, onReceived, editTarget, minMaxByN
   const [maxQty, setMaxQty] = useState("");
   const [mfgDate, setMfgDate] = useState("");
   const [expDate, setExpDate] = useState("");
-  const [staffName, setStaffName] = useState("");
+  const [staffName, setStaffName] = useState(currentStaffName || "");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
+
+  // ซิงค์ชื่อผู้บันทึกเมื่อโหลดข้อมูล user เสร็จ (กรณี currentStaffName โหลดช้า)
+  useEffect(() => {
+    if (currentStaffName) setStaffName(currentStaffName);
+  }, [currentStaffName]);
 
   // เติมข้อมูลลงฟอร์มเมื่อกด "แก้ไข" จากตาราง
   useEffect(() => {
@@ -81,7 +107,7 @@ function ReceiveForm({ drugs, warehouseDeptId, onReceived, editTarget, minMaxByN
     setMaxQty(editTarget.max_qty ?? mm.max ?? "");
     setMfgDate(toDateInput(editTarget.mfg_date));
     setExpDate(toDateInput(editTarget.exp_date));
-    setStaffName("");
+    setStaffName(currentStaffName || "");
     setMessage(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editTarget]);
@@ -98,7 +124,7 @@ function ReceiveForm({ drugs, warehouseDeptId, onReceived, editTarget, minMaxByN
     setMaxQty("");
     setMfgDate("");
     setExpDate("");
-    setStaffName("");
+    setStaffName(currentStaffName || "");
   }
 
   const filteredDrugs = useMemo(() => {
@@ -152,6 +178,7 @@ function ReceiveForm({ drugs, warehouseDeptId, onReceived, editTarget, minMaxByN
         newMfgDate: mfgDate || null,
         newExpDate: expDate || null,
         newQty: qtyNum,
+        unitPrice: unitPrice === "" ? null : Number(unitPrice),
         staffName: staffName || null,
       });
       if (lotErr) {
@@ -326,31 +353,27 @@ function ReceiveForm({ drugs, warehouseDeptId, onReceived, editTarget, minMaxByN
           />
         </div>
 
-        {!isEditing && (
-          <>
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold text-slate-500">ราคาต่อหน่วย (บาท)</label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={unitPrice}
-                onChange={(e) => setUnitPrice(e.target.value)}
-                placeholder="0.00"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-2.5 text-sm outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-50"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold text-slate-500">รวมเป็นเงิน (บาท)</label>
-              <input
-                type="text"
-                readOnly
-                value={totalPrice ? totalPrice.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
-                className="w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 px-3.5 py-2.5 text-sm font-semibold text-slate-600 outline-none"
-              />
-            </div>
-          </>
-        )}
+        <div>
+          <label className="mb-1.5 block text-xs font-semibold text-slate-500">ราคาต่อหน่วย (บาท)</label>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={unitPrice}
+            onChange={(e) => setUnitPrice(e.target.value)}
+            placeholder="0.00"
+            className={`w-full rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-2.5 text-sm outline-none transition focus:bg-white focus:ring-4 ${isEditing ? "focus:border-amber-400 focus:ring-amber-50" : "focus:border-emerald-400 focus:ring-emerald-50"}`}
+          />
+        </div>
+        <div>
+          <label className="mb-1.5 block text-xs font-semibold text-slate-500">รวมเป็นเงิน (บาท)</label>
+          <input
+            type="text"
+            readOnly
+            value={totalPrice ? totalPrice.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
+            className="w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 px-3.5 py-2.5 text-sm font-semibold text-slate-600 outline-none"
+          />
+        </div>
 
         <div>
           <label className="mb-1.5 block text-xs font-semibold text-slate-500">Min</label>
@@ -372,7 +395,13 @@ function ReceiveForm({ drugs, warehouseDeptId, onReceived, editTarget, minMaxByN
 
         <div className="col-span-2">
           <label className="mb-1.5 block text-xs font-semibold text-slate-500">ผู้บันทึก</label>
-          <StaffAutocomplete value={staffName} onChange={setStaffName} />
+          <input
+            type="text"
+            readOnly
+            value={staffName}
+            placeholder="กำลังโหลดชื่อผู้บันทึก..."
+            className="w-full cursor-default rounded-xl border border-slate-200 bg-slate-100 px-3.5 py-2.5 text-sm font-medium text-slate-700 outline-none"
+          />
         </div>
       </div>
 
@@ -410,12 +439,17 @@ function ReceiveForm({ drugs, warehouseDeptId, onReceived, editTarget, minMaxByN
 }
 
 // ---- แถวเดียวของตาราง lot พร้อมปุ่ม เติมยา / แก้ไข / ลบ ----
-function LotRow({ lot, departments, minMax, onDone, onEdit, editingKey }) {
+function LotRow({ lot, departments, minMax, onDone, onEdit, editingKey, currentStaffName }) {
   const [mode, setMode] = useState(null); // null | "transfer"
   const [toDept, setToDept] = useState("");
   const [qty, setQty] = useState("");
-  const [staffName, setStaffName] = useState("");
+  const [staffName, setStaffName] = useState(currentStaffName || "");
   const [saving, setSaving] = useState(false);
+
+  // ซิงค์ชื่อผู้บันทึกเมื่อโหลดข้อมูล user เสร็จ
+  useEffect(() => {
+    if (currentStaffName) setStaffName(currentStaffName);
+  }, [currentStaffName]);
   const [deleting, setDeleting] = useState(false);
   const [returning, setReturning] = useState(false);
   const [error, setError] = useState(null);
@@ -588,7 +622,13 @@ function LotRow({ lot, departments, minMax, onDone, onEdit, editingKey }) {
               </div>
               <div className="min-w-[180px]">
                 <label className="mb-1 block text-xs font-medium text-slate-500">ผู้บันทึก</label>
-                <StaffAutocomplete value={staffName} onChange={setStaffName} />
+                <input
+                  type="text"
+                  readOnly
+                  value={staffName}
+                  placeholder="กำลังโหลดชื่อผู้บันทึก..."
+                  className="w-full cursor-default rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700 outline-none"
+                />
               </div>
               <button onClick={handleTransfer} disabled={saving} className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white disabled:opacity-60">
                 {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} ยืนยันเติมยา
@@ -617,6 +657,7 @@ function LotRow({ lot, departments, minMax, onDone, onEdit, editingKey }) {
 export default function WarehousePage() {
   const { drugs, departments } = useDrugsAndDepartments();
   const warehouseDept = departments.find((d) => d.name === "คลังยา");
+  const currentStaffName = useCurrentStaffName();
   const [viewDeptId, setViewDeptId] = useState("");
   // ค่าจาก <select> เป็น string เสมอ ส่วน d.id ที่มาจากฐานข้อมูลเป็น number
   // ต้องแปลงให้เป็นชนิดเดียวกันก่อนเทียบ ไม่เช่นนั้นจะไม่ตรงกันเลยและ dropdown จะใช้งานไม่ได้
@@ -671,6 +712,7 @@ export default function WarehousePage() {
               minMaxByName={minMax}
               onSavedEdit={handleSavedEdit}
               onCancelEdit={() => setEditingLot(null)}
+              currentStaffName={currentStaffName}
             />
           </div>
 
@@ -743,6 +785,7 @@ export default function WarehousePage() {
                       }}
                       onEdit={setEditingLot}
                       editingKey={editingLot ? `${editingLot.drug_id}-${editingLot.lot}` : null}
+                      currentStaffName={currentStaffName}
                     />
                   ))}
                 </tbody>

@@ -94,6 +94,7 @@ export async function updateLotDetails({
   newMfgDate,
   newExpDate,
   newQty,
+  unitPrice,
   staffName,
 }) {
   if (lotId != null) {
@@ -120,6 +121,7 @@ export async function updateLotDetails({
       exp_date: newExpDate || null,
       change_qty: diffQty,
       reason: "adjust",
+      unit_price: unitPrice ?? null,
       staff_name: staffName || null,
     });
     if (moveErr) return { error: moveErr };
