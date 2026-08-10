@@ -109,6 +109,25 @@ function ReceiveForm({ drugs, warehouseDeptId, onReceived, editTarget, minMaxByN
     setExpDate(toDateInput(editTarget.exp_date));
     setStaffName(currentStaffName || "");
     setMessage(null);
+
+    // ดึงราคาต่อหน่วยล่าสุดจาก stock_movements (รับเข้าล่าสุดของ lot นี้)
+    async function fetchUnitPrice() {
+      const { data } = await supabase
+        .from("stock_movements")
+        .select("unit_price")
+        .eq("drug_id", editTarget.drug_id)
+        .eq("department_id", editTarget.department_id)
+        .eq("lot", editTarget.lot)
+        .in("reason", ["receive", "adjust"])
+        .not("unit_price", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (data?.unit_price != null) {
+        setUnitPrice(String(data.unit_price));
+      }
+    }
+    fetchUnitPrice();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editTarget]);
 
