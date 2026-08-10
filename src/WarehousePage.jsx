@@ -6,6 +6,7 @@ import { useWarehouseLots, receiveStock, transferStock, removeStockLot, updateLo
 import { findOrCreateDrug, updateDrug } from "./useDrugs";
 import { alertSuccess, alertError, confirmAction } from "./alert";
 import { supabase } from "./supabaseClient";
+import { openReplenishPrintWindow } from "./printReplenish";
 
 // ---- ดึงชื่อ-นามสกุลของผู้ใช้ที่ login อยู่จากตาราง profiles ----
 function useCurrentStaffName() {
@@ -499,6 +500,37 @@ function LotRow({ lot, departments, minMax, onDone, onEdit, editingKey, currentS
     setSaving(false);
 
     if (err) return setError(err.message);
+
+    // ★ จุดพิมพ์ — เรียกทันทีหลังบันทึกตัดสต็อกสำเร็จ ★
+    const toDeptObj = departments.find((d) => String(d.id) === String(toDept));
+
+    // ราคาต่อหน่วยล่าสุด (best-effort เหมือนใน ReceiveForm) ไม่มีก็พิมพ์ต่อได้ แค่ไม่โชว์มูลค่า
+    const { data: priceRow } = await supabase
+      .from("stock_movements")
+      .select("unit_price")
+      .eq("drug_id", lot.drug_id)
+      .eq("department_id", lot.department_id)
+      .eq("lot", lot.lot)
+      .in("reason", ["receive", "adjust"])
+      .not("unit_price", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    openReplenishPrintWindow({
+      drugName: lot.drug_name,
+      strength: lot.strength,
+      form: lot.form,
+      lot: lot.lot,
+      mfgDate: lot.mfg_date,
+      expDate: lot.exp_date,
+      qty: qtyNum,
+      unitPrice: priceRow?.unit_price ?? null,
+      fromDeptName: warehouseDept?.name || "คลังยา",
+      toDeptName: toDeptObj?.name || "-",
+      staffName,
+    });
+
     setMode(null);
     setQty("");
     setToDept("");
