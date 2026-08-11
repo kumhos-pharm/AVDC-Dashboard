@@ -269,7 +269,7 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
                     )}
                   </div>
                 ) : (
-                  /* แถวที่ 1: ชื่อผู้ป่วย และ HN */
+                  /* แถวที่ 1: ชื่อผู้ป่วย, HN และห้อง/หน่วยงานที่จ่าย */
                   <div className="flex flex-wrap items-center gap-1.5 pr-16 text-sm">
                     <User className="h-4 w-4 text-slate-500" />
                     <span className="font-bold text-slate-800">
@@ -278,6 +278,11 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
                     <span className="rounded-full bg-slate-500 px-2 py-0.5 text-[11px] font-bold text-white">
                       HN: {r.patient_hn || "-"}
                     </span>
+                    {r.department_name && (
+                      <span className="rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5 text-[11px] font-semibold text-[#0056b3]">
+                        🏥 {r.department_name}
+                      </span>
+                    )}
                   </div>
                 )}
 
