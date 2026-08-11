@@ -93,11 +93,25 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
   useEffect(() => {
     if (!editingRow) return;
     setDepartmentId(editingRow.department_id || "");
+
+    // ดึงวันที่และเวลาจากรายการเดิม (created_at หรือ dispensed_at) เพื่อคงวันที่เดิมเมื่อบันทึกแก้ไข
+    // ถ้าไม่มีให้ fallback เป็นวันปัจจุบัน
+    const originalTs = editingRow.created_at || editingRow.dispensed_at || null;
+    let originalDate = getCurrentDateStr();
+    let originalTime = getCurrentTimeStr();
+    if (originalTs) {
+      const d = new Date(originalTs);
+      originalDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      originalTime = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    }
+
     setFormData((prev) => ({
       ...prev,
       prefix: editingRow.patient_prefix || "",
       patientName: editingRow.patient_name || "",
       hn: editingRow.patient_hn || "",
+      dispenseDate: originalDate,
+      dispenseTime: originalTime,
       staff: editingRow.staff_name || "",
       searchDrug: editingRow.drug_name || "",
       drugId: editingRow.drug_id || "",
@@ -495,6 +509,10 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
 
       setLoading(true);
 
+      // สร้าง ISO timestamp จากวันที่/เวลาในฟอร์ม (ที่โหลดมาจากรายการเดิม) เพื่อคงวันที่-เวลาเดิมไว้
+      const originalCreatedAt =
+        editingRow.created_at || editingRow.dispensed_at || null;
+
       const payload = {
         drug_id: formData.drugId,
         department_id: departmentId,
@@ -508,6 +526,8 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
         patient_name: formData.patientName,
         patient_hn: formData.hn,
         staff_name: formData.staff,
+        // คง created_at เดิมไว้ ไม่ให้กลายเป็นเวลา insert ใหม่
+        ...(originalCreatedAt ? { created_at: originalCreatedAt } : {}),
       };
 
       const { error } = await updateDispense(editingRow.id, payload);

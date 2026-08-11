@@ -216,12 +216,34 @@ export async function cancelReplenish(transferGroupId) {
 // หมายเหตุ: ไม่ใช้ .update() ตรง ๆ เพราะสต็อกถูกปรับผ่าน trigger ตอน insert/delete เท่านั้น
 // (ไม่มี trigger สำหรับ update) จึงต้อง "insert รายการใหม่ก่อน แล้วค่อยลบรายการเดิม"
 // ลำดับนี้เลือกเพราะถ้า insert ล้มเหลว รายการเดิมจะยังอยู่ครบ ไม่มีข้อมูลหาย
+//
+// การคง created_at เดิม:
+// Supabase/Postgres มักตั้ง created_at เป็น DEFAULT now() ทำให้ส่งค่าตรง ๆ ใน insert ไม่ได้เสมอไป
+// จึงใช้วิธี insert ก่อน (ได้ id ของแถวใหม่) แล้วตาม .update({ created_at }) ทันที เพื่อเขียนทับวันที่เดิม
 export async function updateDispense(id, payload) {
-  const { error: insertError } = await supabase.from("stock_movements").insert({
-    ...payload,
-    reason: "dispense",
-  });
+  // แยก created_at ออกก่อน insert เพราะ DB จะ override ด้วย DEFAULT now() อยู่ดี
+  const { created_at: originalCreatedAt, ...insertPayload } = payload;
+
+  const { data: inserted, error: insertError } = await supabase
+    .from("stock_movements")
+    .insert({ ...insertPayload, reason: "dispense" })
+    .select("id")
+    .single();
+
   if (insertError) return { error: insertError };
+
+  // patch created_at กลับเป็นวันเดิมทันทีหลัง insert สำเร็จ
+  if (originalCreatedAt && inserted?.id) {
+    const { error: patchError } = await supabase
+      .from("stock_movements")
+      .update({ created_at: originalCreatedAt })
+      .eq("id", inserted.id);
+
+    if (patchError) {
+      // แจ้ง warning แต่ไม่ block — ข้อมูลยา/สต็อกถูกต้องแล้ว เพียงวันที่อาจไม่ตรง
+      console.warn("ไม่สามารถคง created_at เดิมได้:", patchError.message);
+    }
+  }
 
   const { error: deleteError } = await supabase.from("stock_movements").delete().eq("id", id);
   if (deleteError) {
