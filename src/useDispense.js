@@ -95,8 +95,10 @@ export function useDispenseHistory(searchTerm) {
           : Promise.resolve({ data: [] }),
         // ดึง transfer_group_id ตรงจาก stock_movements ด้วย id เสมอ เผื่อ view ยังไม่มีคอลัมน์นี้
         // (สาเหตุที่ปุ่ม "ยกเลิกการเติมยา" ใช้งานไม่ได้/เป็นสีเทาค้าง เพราะ r.transfer_group_id เป็น undefined ตลอด)
+        // ดึง created_at จาก stock_movements โดยตรงด้วย เพราะ view อาจไม่มีหรือค่าไม่ตรง
+        // ใช้ตอนแก้ไขรายการเพื่อคง created_at เดิมไว้ (ไม่ให้กลายเป็นวันที่แก้ไข)
         rowIds.length > 0
-          ? supabase.from("stock_movements").select("id, transfer_group_id").in("id", rowIds)
+          ? supabase.from("stock_movements").select("id, transfer_group_id, created_at").in("id", rowIds)
           : Promise.resolve({ data: [] }),
       ]);
 
@@ -115,7 +117,7 @@ export function useDispenseHistory(searchTerm) {
       (drugRes.data ?? []).forEach((d) => drugMap.set(String(d.id), d));
 
       const movementMap = new Map();
-      (movementRes.data ?? []).forEach((m) => movementMap.set(m.id, m.transfer_group_id));
+      (movementRes.data ?? []).forEach((m) => movementMap.set(m.id, { transfer_group_id: m.transfer_group_id, created_at: m.created_at }));
 
       dispenseRows.forEach((r) => {
         if (r.lot_row_id && idMap.has(r.lot_row_id)) {
@@ -132,7 +134,10 @@ export function useDispenseHistory(searchTerm) {
         r.strength = r.strength || drugInfo?.strength || null;
 
         if (movementMap.has(r.id)) {
-          r.transfer_group_id = movementMap.get(r.id);
+          const mv = movementMap.get(r.id);
+          r.transfer_group_id = mv.transfer_group_id;
+          // เขียนทับ created_at ด้วยค่าตรงจาก stock_movements เสมอ (แม่นยำกว่า view)
+          if (mv.created_at) r.created_at = mv.created_at;
         }
       });
     }
