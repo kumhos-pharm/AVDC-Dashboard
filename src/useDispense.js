@@ -237,12 +237,13 @@ export async function updateDispense(id, payload) {
 
   if (insertError) return { error: insertError };
 
-  // patch created_at กลับเป็นวันเดิมทันทีหลัง insert สำเร็จ
+  // patch created_at กลับเป็นวันที่ต้องการผ่าน RPC (bypass DEFAULT now() และ trigger ของ Supabase)
+  // ใช้ RPC แทน .update() ตรง ๆ เพราะ Postgres มักป้องกันการเขียนทับ created_at จากฝั่ง client
   if (originalCreatedAt && inserted?.id) {
-    const { error: patchError } = await supabase
-      .from("stock_movements")
-      .update({ created_at: originalCreatedAt })
-      .eq("id", inserted.id);
+    const { error: patchError } = await supabase.rpc("update_movement_created_at", {
+      p_id: inserted.id,
+      p_created_at: originalCreatedAt,
+    });
 
     if (patchError) {
       // แจ้ง warning แต่ไม่ block — ข้อมูลยา/สต็อกถูกต้องแล้ว เพียงวันที่อาจไม่ตรง

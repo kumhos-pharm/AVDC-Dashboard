@@ -509,9 +509,17 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
 
       setLoading(true);
 
-      // สร้าง ISO timestamp จากวันที่/เวลาในฟอร์ม (ที่โหลดมาจากรายการเดิม) เพื่อคงวันที่-เวลาเดิมไว้
-      const originalCreatedAt =
-        editingRow.created_at || editingRow.dispensed_at || null;
+      // สร้าง ISO timestamp จากวันที่/เวลาในฟอร์ม เพื่อให้ผู้ใช้แก้ไขวันที่-เวลาจ่ายยาได้
+      // ใช้ค่าจาก formData.dispenseDate + dispenseTime (ซึ่งโหลดมาจากรายการเดิมตอนเปิดฟอร์ม
+      // และผู้ใช้สามารถแก้ไขได้) ไม่ใช้ editingRow.created_at ตรง ๆ เพื่อให้รองรับการแก้วันที่ด้วย
+      let createdAtFromForm = null;
+      if (formData.dispenseDate && formData.dispenseTime) {
+        // รวม date + time เป็น ISO string โดยใช้ timezone ของเครื่องผู้ใช้
+        createdAtFromForm = new Date(`${formData.dispenseDate}T${formData.dispenseTime}:00`).toISOString();
+      } else {
+        // fallback: ใช้ created_at เดิมจาก DB ถ้าฟอร์มไม่มีค่า
+        createdAtFromForm = editingRow.created_at || editingRow.dispensed_at || null;
+      }
 
       const payload = {
         drug_id: formData.drugId,
@@ -526,8 +534,8 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
         patient_name: formData.patientName,
         patient_hn: formData.hn,
         staff_name: formData.staff,
-        // คง created_at เดิมไว้ ไม่ให้กลายเป็นเวลา insert ใหม่
-        ...(originalCreatedAt ? { created_at: originalCreatedAt } : {}),
+        // ส่งวันที่-เวลาจากฟอร์ม (ที่ผู้ใช้อาจแก้ไขแล้ว) ให้ updateDispense นำไป patch ผ่าน RPC
+        ...(createdAtFromForm ? { created_at: createdAtFromForm } : {}),
       };
 
       const { error } = await updateDispense(editingRow.id, payload);
