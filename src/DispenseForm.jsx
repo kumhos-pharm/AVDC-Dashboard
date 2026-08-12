@@ -520,6 +520,8 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
         // fallback: ใช้ created_at เดิมจาก DB ถ้าฟอร์มไม่มีค่า
         createdAtFromForm = editingRow.created_at || editingRow.dispensed_at || null;
       }
+      // DEBUG: ลบบรรทัดนี้ทิ้งได้หลังแก้ปัญหาเสร็จ
+      console.log("[DEBUG] formData.dispenseDate:", formData.dispenseDate, "formData.dispenseTime:", formData.dispenseTime, "=> createdAtFromForm:", createdAtFromForm);
 
       const payload = {
         drug_id: formData.drugId,

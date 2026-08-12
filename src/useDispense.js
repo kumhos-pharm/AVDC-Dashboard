@@ -222,12 +222,14 @@ export async function cancelReplenish(transferGroupId) {
 // (ไม่มี trigger สำหรับ update) จึงต้อง "insert รายการใหม่ก่อน แล้วค่อยลบรายการเดิม"
 // ลำดับนี้เลือกเพราะถ้า insert ล้มเหลว รายการเดิมจะยังอยู่ครบ ไม่มีข้อมูลหาย
 //
-// การคง created_at เดิม:
-// Supabase/Postgres มักตั้ง created_at เป็น DEFAULT now() ทำให้ส่งค่าตรง ๆ ใน insert ไม่ได้เสมอไป
-// จึงใช้วิธี insert ก่อน (ได้ id ของแถวใหม่) แล้วตาม .update({ created_at }) ทันที เพื่อเขียนทับวันที่เดิม
+// การคง/แก้ created_at:
+// Supabase/Postgres ตั้ง created_at เป็น DEFAULT now() ทำให้ตอน insert (ไม่ระบุ created_at)
+// จะได้เวลาปัจจุบันเสมอ จึง insert ก่อน (ได้ id ของแถวใหม่) แล้วเรียก RPC update_movement_created_at
+// (function ที่สร้างไว้ใน Supabase ผ่าน supabase_rpc.sql, เป็น SECURITY DEFINER) เพื่อเขียนทับ
+// created_at เป็นวันที่ผู้ใช้เลือกในฟอร์ม
 export async function updateDispense(id, payload) {
-  // แยก created_at ออกก่อน insert เพราะ DB จะ override ด้วย DEFAULT now() อยู่ดี
-  const { created_at: originalCreatedAt, ...insertPayload } = payload;
+  // แยก created_at ออกจาก payload ก่อน insert เพราะ DEFAULT now() จะ override ค่าที่ส่งไปตรง ๆ อยู่ดี
+  const { created_at: newCreatedAt, ...insertPayload } = payload;
 
   const { data: inserted, error: insertError } = await supabase
     .from("stock_movements")
@@ -237,24 +239,21 @@ export async function updateDispense(id, payload) {
 
   if (insertError) return { error: insertError };
 
-  // patch created_at กลับเป็นวันที่ต้องการผ่าน RPC (bypass DEFAULT now() และ trigger ของ Supabase)
-  // ใช้ RPC แทน .update() ตรง ๆ เพราะ Postgres มักป้องกันการเขียนทับ created_at จากฝั่ง client
-  if (originalCreatedAt && inserted?.id) {
+  // patch created_at ผ่าน RPC (function ชื่อ update_movement_created_at ต้องสร้างใน Supabase ก่อน)
+  if (newCreatedAt && inserted?.id) {
     const { error: patchError } = await supabase.rpc("update_movement_created_at", {
       p_id: inserted.id,
-      p_created_at: originalCreatedAt,
+      p_created_at: newCreatedAt,
     });
-
     if (patchError) {
-      // แจ้ง warning แต่ไม่ block — ข้อมูลยา/สต็อกถูกต้องแล้ว เพียงวันที่อาจไม่ตรง
-      console.warn("ไม่สามารถคง created_at เดิมได้:", patchError.message);
+      // ถ้าเห็น warning นี้ใน console แปลว่า RPC function ยังไม่ถูกสร้างใน Supabase
+      // หรือชื่อ parameter ไม่ตรง — ต้องรัน supabase_rpc.sql ก่อน
+      console.warn("patch created_at ไม่สำเร็จ (เช็คว่ารัน supabase_rpc.sql แล้วหรือยัง):", patchError.message);
     }
   }
 
   const { error: deleteError } = await supabase.from("stock_movements").delete().eq("id", id);
   if (deleteError) {
-    // insert รายการใหม่สำเร็จแล้ว แต่ลบรายการเดิมไม่สำเร็จ -> จะมี 2 รายการซ้อนกันชั่วคราว
-    // ต้องแจ้งผู้ใช้ให้รู้ชัดเจน เพื่อให้เข้ามาลบรายการเก่าด้วยตนเองภายหลัง
     return {
       error: new Error(
         "บันทึกรายการที่แก้ไขสำเร็จ แต่ลบรายการเดิมไม่สำเร็จ กรุณาลบรายการเก่าด้วยตนเอง: " +
