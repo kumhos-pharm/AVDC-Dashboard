@@ -54,6 +54,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
     mfgDateRaw: "",        // ค่าจริงไว้บันทึกลง DB
     expDateRaw: "",
     maxQuantity: undefined,
+    unitPrice: null,        // ราคาต่อหน่วยของล็อตที่เลือก (มาจาก v_dispensable_lots.unit_price)
   });
 
   // หน่วยงานที่จ่าย (ต้องเลือกก่อน เพราะสต็อก/ล็อตที่ค้นหาได้ผูกกับหน่วยงานนี้)
@@ -324,6 +325,9 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
       mfgDateRaw: drug.mfg_date || "",
       expDateRaw: drug.exp_date || "",
       maxQuantity: drug.quantity,
+      // ราคาต่อหน่วยของ "ล็อตนี้" ณ ตอนรับเข้า (แช่แข็งราคาไว้ตอนจ่ายจริง ไม่ใช้ราคาปัจจุบันย้อนหลัง
+      // เพราะแต่ละล็อตอาจซื้อมาคนละราคา) — รอ view v_dispensable_lots เพิ่มคอลัมน์นี้ก่อนถึงจะมีค่าจริง
+      unitPrice: drug.unit_price ?? null,
     }));
     setShowDropdown(false);
     setDrugHighlightIndex(-1);
@@ -538,6 +542,8 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
         staff_name: formData.staff,
         // ส่งวันที่-เวลาจากฟอร์ม (ที่ผู้ใช้อาจแก้ไขแล้ว) ให้ updateDispense นำไป patch ผ่าน RPC
         ...(createdAtFromForm ? { created_at: createdAtFromForm } : {}),
+        // ถ้าไม่ได้เปลี่ยนล็อต (ไม่มี unitPrice ใหม่จากการเลือกยาใหม่) ให้คงราคาเดิมของรายการนี้ไว้ ไม่ล้างเป็น null
+        unit_price: formData.unitPrice ?? editingRow.unit_price ?? null,
       };
 
       const { error } = await updateDispense(editingRow.id, payload);
@@ -749,6 +755,8 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
             patient_prefix: formData.prefix,
             patient_name: formData.patientName,
             patient_hn: formData.hn,
+            // ราคาต่อหน่วยของล็อตนี้ ณ ตอนจ่ายจริง (ใช้คำนวณมูลค่าจ่ายยาในหน้ารายงาน)
+            unit_price: formData.unitPrice,
           },
         ]);
 
