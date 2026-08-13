@@ -608,6 +608,8 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
             mfg_date: formData.mfgDateRaw || null,
             exp_date: formData.expDateRaw || null,
             transfer_group_id: transferGroupId,
+            // ราคาต่อหน่วยของล็อตนี้ (จากคลังยา) พาไปด้วย เพื่อไม่ให้ราคาหายตอนโอนย้ายหน่วยงาน
+            unit_price: formData.unitPrice,
           },
         ]);
         if (outError) throw outError;
@@ -665,6 +667,9 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
             mfg_date: formData.mfgDateRaw || null,
             exp_date: formData.expDateRaw || null,
             transfer_group_id: transferGroupId,
+            // ราคาต่อหน่วยเดียวกับฝั่งตัดออก (บรรทัดข้างบน) — ทำให้ล็อตที่หน่วยงานปลายทาง
+            // มีราคาให้ v_dispensable_lots ดึงไปใช้ตอนจ่ายยาต่อได้ทันที ไม่ต้องรอราคาจากที่อื่น
+            unit_price: formData.unitPrice,
           },
         ]);
         if (inError) throw inError;
