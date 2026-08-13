@@ -420,9 +420,11 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
 
   // สร้างข้อความสรุปรายการจ่ายยา สำหรับส่งเข้ากลุ่มไลน์ (รูปแบบเดียวกับระบบเดิม)
   const buildDispenseMessage = (qty, remainingStock) => {
+    const deptName = departments.find((d) => String(d.id) === String(departmentId))?.name || "-";
     const lines = [
       "📢 บันทึกจ่ายยาใหม่! 💊",
       "------------------------------",
+      `🏥 หน่วยงาน: ${deptName}`,
       `👤 ผู้ป่วย: ${formData.prefix}${formData.patientName || "-"}`,
       `🆔 HN: ${formData.hn || "-"}`,
       "------------------------------",
@@ -445,10 +447,11 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
 
   // สร้างข้อความสรุปการเติมยาหน่วยงาน สำหรับส่งเข้ากลุ่มไลน์
   const buildReplenishMessage = (qty, destDeptName, remainingAtAvdc) => {
+    const sourceDeptName = departments.find((d) => String(d.id) === String(departmentId))?.name || "ศูนย์ AVDC (Phar-OPD)";
     const lines = [
       "📦 เติมยาหน่วยงาน! 🔄",
       "------------------------------",
-      `🏥 จาก: ศูนย์ AVDC (Phar-OPD)`,
+      `🏥 จาก: ${sourceDeptName}`,
       `🏥 ถึง: ${destDeptName}`,
       "------------------------------",
       "รายการยา:",
