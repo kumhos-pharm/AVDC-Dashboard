@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Warehouse, Search, PackagePlus, Send, Loader2, Pencil, Trash2, X, XCircle, AlertTriangle, SquarePen, Undo2 } from "lucide-react";
+import { Warehouse, Search, PackagePlus, Send, Loader2, Pencil, Trash2, X, XCircle, AlertTriangle, SquarePen, Undo2, ShoppingCart } from "lucide-react";
 import { useDrugsAndDepartments } from "./useDispense";
 import { useWarehouseLots, receiveStock, transferStock, removeStockLot, updateLotDetails, updateMinMax, useWarehouseMinMax, returnLotToWarehouse } from "./useWarehouse";
 import { findOrCreateDrug, updateDrug } from "./useDrugs";
@@ -459,7 +459,7 @@ function ReceiveForm({ drugs, warehouseDeptId, onReceived, editTarget, minMaxByN
 }
 
 // ---- แถวเดียวของตาราง lot พร้อมปุ่ม เติมยา / แก้ไข / ลบ ----
-function LotRow({ lot, departments, minMax, onDone, onEdit, editingKey, currentStaffName }) {
+function LotRow({ lot, departments, minMax, onDone, onEdit, editingKey, currentStaffName, onAddToCart }) {
   const [mode, setMode] = useState(null); // null | "transfer"
   const [toDept, setToDept] = useState("");
   const [qty, setQty] = useState("");
@@ -518,14 +518,18 @@ function LotRow({ lot, departments, minMax, onDone, onEdit, editingKey, currentS
       .maybeSingle();
 
     openReplenishPrintWindow({
-      drugName: lot.drug_name,
-      strength: lot.strength,
-      form: lot.form,
-      lot: lot.lot,
-      mfgDate: lot.mfg_date,
-      expDate: lot.exp_date,
-      qty: qtyNum,
-      unitPrice: priceRow?.unit_price ?? null,
+      items: [
+        {
+          drugName: lot.drug_name,
+          strength: lot.strength,
+          form: lot.form,
+          lot: lot.lot,
+          mfgDate: lot.mfg_date,
+          expDate: lot.exp_date,
+          qty: qtyNum,
+          unitPrice: priceRow?.unit_price ?? null,
+        },
+      ],
       fromDeptName: warehouseDept?.name || "คลังยา",
       toDeptName: toDeptObj?.name || "-",
       staffName,
@@ -536,6 +540,43 @@ function LotRow({ lot, departments, minMax, onDone, onEdit, editingKey, currentS
     setToDept("");
     alertSuccess(`เติมยา ${lot.drug_name} (Lot ${lot.lot}) จำนวน ${qtyNum} ให้หน่วยงานปลายทางเรียบร้อยแล้ว`);
     onDone?.();
+  }
+
+  // เพิ่มรายการนี้ลงตะกร้า (ยังไม่ตัดสต็อก) — ใช้ตอนต้องการเติมหลายรายการ
+  // ให้หน่วยงานเดียวกัน แล้วพิมพ์ใบนำส่งรวมทีเดียวตอนกด "ยืนยันเติมทั้งหมด"
+  async function handleAddToCart() {
+    setError(null);
+    const qtyNum = Number(qty);
+    if (!qtyNum || qtyNum <= 0 || qtyNum > lot.quantity) return setError(`จำนวนต้องมากกว่า 0 และไม่เกิน ${lot.quantity}`);
+
+    const { data: priceRow } = await supabase
+      .from("stock_movements")
+      .select("unit_price")
+      .eq("drug_id", lot.drug_id)
+      .eq("department_id", lot.department_id)
+      .eq("lot", lot.lot)
+      .in("reason", ["receive", "adjust"])
+      .not("unit_price", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    onAddToCart?.({
+      drugId: lot.drug_id,
+      drugName: lot.drug_name,
+      strength: lot.strength,
+      form: lot.form,
+      lot: lot.lot,
+      mfgDate: lot.mfg_date,
+      expDate: lot.exp_date,
+      sourceDeptId: lot.department_id,
+      qty: qtyNum,
+      unitPrice: priceRow?.unit_price ?? null,
+    });
+
+    setMode(null);
+    setQty("");
+    setToDept("");
   }
 
   async function handleReturn() {
@@ -686,6 +727,14 @@ function LotRow({ lot, departments, minMax, onDone, onEdit, editingKey, currentS
               </button>
               <button
                 type="button"
+                onClick={handleAddToCart}
+                className="flex items-center gap-1.5 rounded-lg bg-indigo-50 px-4 py-2 text-xs font-semibold text-indigo-600 transition hover:bg-indigo-100"
+                title="เก็บไว้เติมพร้อมรายการอื่น แล้วพิมพ์ใบนำส่งรวมทีหลัง"
+              >
+                <ShoppingCart className="h-3.5 w-3.5" /> เพิ่มลงตะกร้า
+              </button>
+              <button
+                type="button"
                 onClick={() => setMode(null)}
                 className="flex items-center gap-1.5 rounded-lg bg-red-50 px-4 py-2 text-xs font-semibold text-red-500 transition hover:bg-red-100"
               >
@@ -693,6 +742,9 @@ function LotRow({ lot, departments, minMax, onDone, onEdit, editingKey, currentS
               </button>
             </div>
             {error && <p className="mt-2 text-xs font-medium text-red-500">{error}</p>}
+            <p className="mt-2 text-[11px] text-slate-400">
+              * หน่วยงานปลายทางด้านบนใช้กับปุ่ม "ยืนยันเติมยา" (พิมพ์ทันที) เท่านั้น — ถ้ากด "เพิ่มลงตะกร้า" จะเลือกหน่วยงานปลายทางตอนยืนยันรวมด้านล่างแทน
+            </p>
           </td>
         </tr>
       )}
@@ -731,6 +783,83 @@ export default function WarehousePage() {
   const { map: minMax, reload: reloadMinMax } = useWarehouseMinMax(viewDept?.name);
   const [editingLot, setEditingLot] = useState(null);
 
+  // ---- ตะกร้าเติมยา: สะสมหลายรายการ (จากยาต่าง lot กันได้) แล้วยืนยัน+พิมพ์ใบนำส่งรวมใบเดียว ----
+  const [cart, setCart] = useState([]); // { key, drugId, drugName, strength, form, lot, mfgDate, expDate, sourceDeptId, qty, unitPrice }
+  const [cartToDept, setCartToDept] = useState("");
+  const [cartConfirming, setCartConfirming] = useState(false);
+
+  function addToCart(item) {
+    setCart((prev) => [...prev, { ...item, key: `${item.drugId}-${item.lot}-${Date.now()}-${Math.random()}` }]);
+  }
+
+  function removeFromCart(key) {
+    setCart((prev) => prev.filter((it) => it.key !== key));
+  }
+
+  async function confirmCart() {
+    if (!cartToDept) return alertError("กรุณาเลือกหน่วยงานปลายทางสำหรับตะกร้าก่อน");
+    if (cart.length === 0) return;
+
+    setCartConfirming(true);
+    const toDeptObj = departments.find((d) => String(d.id) === String(cartToDept));
+    const succeeded = [];
+    const failed = [];
+
+    // วนตัดสต็อกทีละรายการ (RPC ปัจจุบันรับทีละรายการ) เก็บผลลัพธ์แยกสำเร็จ/ล้มเหลว
+    for (const item of cart) {
+      const { error: err } = await transferStock({
+        drugId: item.drugId,
+        lot: item.lot,
+        fromDepartmentId: item.sourceDeptId,
+        toDepartmentId: Number(cartToDept),
+        qty: item.qty,
+        mfgDate: item.mfgDate,
+        expDate: item.expDate,
+        staffName: currentStaffName,
+      });
+      if (err) {
+        failed.push({ ...item, errorMessage: err.message });
+      } else {
+        succeeded.push(item);
+      }
+    }
+    setCartConfirming(false);
+
+    // พิมพ์เฉพาะรายการที่ตัดสต็อกสำเร็จจริงเท่านั้น — ไม่พิมพ์เอกสารที่มีรายการ
+    // ซึ่งไม่ได้บันทึกลง DB ปนอยู่ เพราะจะทำให้เอกสารไม่ตรงกับสต็อกจริง
+    if (succeeded.length > 0) {
+      openReplenishPrintWindow({
+        items: succeeded.map((it) => ({
+          drugName: it.drugName,
+          strength: it.strength,
+          form: it.form,
+          lot: it.lot,
+          mfgDate: it.mfgDate,
+          expDate: it.expDate,
+          qty: it.qty,
+          unitPrice: it.unitPrice,
+        })),
+        fromDeptName: warehouseDept?.name || "คลังยา",
+        toDeptName: toDeptObj?.name || "-",
+        staffName: currentStaffName,
+      });
+    }
+
+    if (failed.length > 0) {
+      alertError(
+        `เติมยาไม่สำเร็จ ${failed.length} รายการ: ${failed.map((f) => f.drugName).join(", ")} — รายการที่พลาดยังค้างอยู่ในตะกร้า ลองยืนยันใหม่ได้`
+      );
+      setCart(failed); // เหลือเฉพาะรายการที่ล้มเหลวไว้ให้ลองใหม่ ไม่ต้องเลือกยาซ้ำ
+    } else {
+      setCart([]);
+      setCartToDept("");
+      alertSuccess(`เติมยา ${succeeded.length} รายการให้ ${toDeptObj?.name || "หน่วยงานปลายทาง"} เรียบร้อยแล้ว`);
+    }
+
+    reload();
+    reloadMinMax();
+  }
+
   function handleSavedEdit() {
     setEditingLot(null);
     reload();
@@ -749,6 +878,68 @@ export default function WarehousePage() {
             <p className="text-xs text-slate-400">จัดการยาคงคลังของศูนย์ AVDC</p>
           </div>
         </div>
+
+        {cart.length > 0 && (
+          <div className="mb-6 rounded-3xl border border-indigo-200 bg-indigo-50/60 p-5">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="flex items-center gap-2 text-sm font-bold text-indigo-700">
+                <ShoppingCart className="h-4 w-4" /> ตะกร้าเติมยา ({cart.length} รายการ)
+              </h2>
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-indigo-600">หน่วยงานปลายทาง (ทั้งตะกร้า)</label>
+                <select
+                  value={cartToDept}
+                  onChange={(e) => setCartToDept(e.target.value)}
+                  className="rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-sm"
+                >
+                  <option value="">เลือกหน่วยงาน</option>
+                  {departments.filter((d) => d.id !== warehouseDept?.id).map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="overflow-hidden rounded-xl border border-indigo-100 bg-white">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-indigo-50 text-indigo-600">
+                    <th className="p-2 text-left font-semibold">ชื่อยา</th>
+                    <th className="p-2 text-left font-semibold">Lot</th>
+                    <th className="p-2 text-center font-semibold">จำนวน</th>
+                    <th className="p-2 text-center font-semibold"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cart.map((item) => (
+                    <tr key={item.key} className="border-t border-indigo-50">
+                      <td className="p-2 font-medium text-slate-700">
+                        {item.drugName} {item.strength} {item.form}
+                        {item.errorMessage && <span className="ml-2 text-[11px] font-normal text-red-500">({item.errorMessage})</span>}
+                      </td>
+                      <td className="p-2 text-slate-500">{item.lot}</td>
+                      <td className="p-2 text-center">{item.qty}</td>
+                      <td className="p-2 text-center">
+                        <button onClick={() => removeFromCart(item.key)} className="text-red-400 hover:text-red-600" title="เอาออกจากตะกร้า">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <button
+              onClick={confirmCart}
+              disabled={cartConfirming || !cartToDept}
+              className="mt-3 flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
+            >
+              {cartConfirming ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+              ยืนยันเติมทั้งหมด และพิมพ์ใบนำส่ง
+            </button>
+          </div>
+        )}
 
         <div className="flex flex-col gap-6">
           <div className="w-full">
@@ -837,6 +1028,7 @@ export default function WarehousePage() {
                       onEdit={setEditingLot}
                       editingKey={editingLot ? `${editingLot.drug_id}-${editingLot.lot}` : null}
                       currentStaffName={currentStaffName}
+                      onAddToCart={addToCart}
                     />
                   ))}
                 </tbody>

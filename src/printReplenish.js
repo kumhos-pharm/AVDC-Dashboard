@@ -1,15 +1,27 @@
 // printReplenish.js
 // ---------------------------------------------------------------------------
 // เปิดหน้าต่างใหม่แล้วพิมพ์ "ใบนำส่งเติมยา" ขนาด A4 ทันที
-// ทำงานฝั่ง client ล้วนๆ ไม่ต้องมี backend/route เพิ่ม เพราะข้อมูลที่ต้องใช้
-// มีอยู่ครบแล้วในมือ ณ ตอนที่ handleTransfer() เพิ่งเรียก transferStock() สำเร็จ
+// รองรับทั้งเติมยาทีละรายการ และเติมหลายรายการพร้อมกัน (จากตะกร้า) รวมในใบเดียว
+// ทำงานฝั่ง client ล้วนๆ ไม่ต้องมี backend/route เพิ่ม
 //
-// หมายเหตุสำคัญ: "เลขที่อ้างอิง" ที่แสดงในเอกสาร เป็นเลขที่สร้างฝั่ง client
-// เพื่อใช้แสดงผล/อ้างอิงตอนพิมพ์เท่านั้น "ไม่ได้บันทึกลงฐานข้อมูล" เพราะ
-// transferStock() ปัจจุบันเรียกผ่าน supabase.rpc("transfer_stock", ...) และ
-// ไม่ได้ return แถวที่เพิ่งสร้างกลับมา ถ้าต้องการเลขที่อ้างอิงที่ผูกกับ DB จริง
-// (ไว้ค้นย้อนหลัง/ออกใบซ้ำจากฐานข้อมูล) ต้องแก้ SQL function ฝั่ง Postgres ให้
-// RETURN แถวที่ insert แล้วปรับ transferStock() ให้ไม่ทิ้งค่า data
+// ★ BREAKING CHANGE จากเวอร์ชันก่อนหน้า ★
+// เดิม openReplenishPrintWindow(data) รับฟิลด์ของยาตรงๆ ที่ level บนสุด
+// (data.drugName, data.lot, data.qty, ...) — ตอนนี้เปลี่ยนเป็นรับ data.items
+// เป็น "อาเรย์ของรายการยา" เสมอ แม้มีรายการเดียวก็ต้องห่อเป็น items: [ {...} ]
+// จุดที่เรียกใช้ทั้งหมดใน WarehousePage.jsx ถูกแก้ให้ตรงกับ signature ใหม่แล้ว
+//
+// data ที่ต้องส่งเข้ามา:
+// {
+//   items: [
+//     { drugName, strength, form, lot, mfgDate, expDate, qty, unitPrice }, // unitPrice optional
+//     ...
+//   ],
+//   fromDeptName, toDeptName, staffName,
+// }
+//
+// หมายเหตุ: "เลขที่อ้างอิง" สร้างฝั่ง client เพื่อแสดงผลตอนพิมพ์เท่านั้น
+// ไม่ได้บันทึกลงฐานข้อมูล เพราะ transferStock() เรียกผ่าน supabase.rpc()
+// และไม่ได้ return แถวที่เพิ่งสร้างกลับมา
 // ---------------------------------------------------------------------------
 
 function escapeHtml(str) {
@@ -24,6 +36,10 @@ function fmtDateTH(d) {
   return new Date(d).toLocaleDateString("th-TH");
 }
 
+function fmtMoney(n) {
+  return Number(n).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function genClientRef() {
   const now = new Date();
   const pad = (n) => String(n).padStart(2, "0");
@@ -32,28 +48,38 @@ function genClientRef() {
   )}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
 }
 
-/**
- * data ที่ต้องส่งเข้ามา (ทั้งหมดมีอยู่แล้วในสโคปของ handleTransfer):
- * {
- *   drugName, strength, form, lot, mfgDate, expDate,
- *   qty, unitPrice,           // unitPrice เป็น optional (best-effort fetch)
- *   fromDeptName, toDeptName,
- *   staffName,
- * }
- */
 export function buildReplenishPrintHtml(data) {
-  const {
-    drugName, strength, form, lot, mfgDate, expDate,
-    qty, unitPrice, fromDeptName, toDeptName, staffName,
-  } = data;
+  const { items, fromDeptName, toDeptName, staffName } = data;
 
   const refNo = genClientRef();
   const now = new Date();
   const issueDate = now.toLocaleDateString("th-TH");
   const issueTime = now.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
 
-  const total = unitPrice != null ? Number(qty) * Number(unitPrice) : null;
-  const drugLabel = [drugName, strength, form].filter(Boolean).join(" ");
+  const rows = items.map((it) => {
+    const total = it.unitPrice != null ? Number(it.qty) * Number(it.unitPrice) : null;
+    const drugLabel = [it.drugName, it.strength, it.form].filter(Boolean).join(" ");
+    return { ...it, total, drugLabel };
+  });
+
+  const totalQty = rows.reduce((s, r) => s + (Number(r.qty) || 0), 0);
+  const allHavePrice = rows.every((r) => r.total != null);
+  const totalValue = allHavePrice ? rows.reduce((s, r) => s + r.total, 0) : null;
+
+  const rowsHtml = rows
+    .map(
+      (r) => `
+      <tr>
+        <td class="name">${escapeHtml(r.drugLabel)}</td>
+        <td>${escapeHtml(r.lot)}</td>
+        <td>${escapeHtml(fmtDateTH(r.mfgDate))}</td>
+        <td>${escapeHtml(fmtDateTH(r.expDate))}</td>
+        <td>${escapeHtml(r.qty)}</td>
+        <td>${r.unitPrice != null ? fmtMoney(r.unitPrice) : "-"}</td>
+        <td>${r.total != null ? fmtMoney(r.total) : "-"}</td>
+      </tr>`
+    )
+    .join("");
 
   return `<!DOCTYPE html>
 <html lang="th">
@@ -81,6 +107,8 @@ export function buildReplenishPrintHtml(data) {
   table.items th, table.items td { border: 1px solid #000; padding: 6px 8px; font-size: 14px; text-align: center; }
   table.items thead th { background: #d9d9d9; font-weight: bold; }
   table.items td.name { text-align: left; }
+  table.items tfoot td { background: #f2f2f2; font-weight: bold; }
+  table.items tfoot td.total-label { text-align: right; }
   table.signatures { width: 100%; border-collapse: collapse; margin-top: 26px; }
   table.signatures td { width: 33.33%; text-align: center; vertical-align: top; padding: 0 10px; font-size: 15px; }
   .sig-line { margin-top: 42px; }
@@ -112,31 +140,31 @@ export function buildReplenishPrintHtml(data) {
     </tr>
   </table>
 
-  <div class="section-title">รายการเวชภัณฑ์ที่นำส่งเติม</div>
+  <div class="section-title">รายการเวชภัณฑ์ที่นำส่งเติม (${rows.length} รายการ)</div>
 
   <table class="items">
     <thead>
       <tr>
-        <th style="width:32%">ชื่อเวชภัณฑ์</th>
+        <th style="width:30%">ชื่อเวชภัณฑ์</th>
         <th style="width:14%">Lot no.</th>
-        <th style="width:14%">วันผลิต</th>
-        <th style="width:14%">วันหมดอายุ</th>
+        <th style="width:12%">วันผลิต</th>
+        <th style="width:12%">วันหมดอายุ</th>
         <th style="width:10%">จำนวนที่เติม</th>
-        <th style="width:8%">มูลค่า/หน่วย</th>
-        <th style="width:8%">มูลค่ารวม</th>
+        <th style="width:11%">มูลค่า/หน่วย</th>
+        <th style="width:11%">มูลค่ารวม</th>
       </tr>
     </thead>
     <tbody>
-      <tr>
-        <td class="name">${escapeHtml(drugLabel)}</td>
-        <td>${escapeHtml(lot)}</td>
-        <td>${escapeHtml(fmtDateTH(mfgDate))}</td>
-        <td>${escapeHtml(fmtDateTH(expDate))}</td>
-        <td>${escapeHtml(qty)}</td>
-        <td>${unitPrice != null ? Number(unitPrice).toLocaleString("th-TH", { minimumFractionDigits: 2 }) : "-"}</td>
-        <td>${total != null ? total.toLocaleString("th-TH", { minimumFractionDigits: 2 }) : "-"}</td>
-      </tr>
+      ${rowsHtml}
     </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="4" class="total-label">รวมทั้งหมด ${rows.length} รายการ</td>
+        <td>${totalQty}</td>
+        <td></td>
+        <td>${totalValue != null ? fmtMoney(totalValue) : "-"}</td>
+      </tr>
+    </tfoot>
   </table>
 
   <table class="signatures">
@@ -169,14 +197,13 @@ export function buildReplenishPrintHtml(data) {
 }
 
 /**
- * เรียกใช้จาก handleTransfer() หลัง transferStock() สำเร็จ
- * เช่น: openReplenishPrintWindow({ drugName: lot.drug_name, ... })
+ * เรียกใช้หลัง transferStock() สำเร็จ (ทีละรายการ หรือหลายรายการจากตะกร้า)
+ * ตัวอย่าง: openReplenishPrintWindow({ items: [...], fromDeptName, toDeptName, staffName })
  */
 export function openReplenishPrintWindow(data) {
   const html = buildReplenishPrintHtml(data);
   const printWindow = window.open("", "_blank", "width=900,height=1000");
   if (!printWindow) {
-    // เบราว์เซอร์บล็อก popup — แจ้งผู้ใช้แทนการล้มเหลวเงียบๆ
     alert("เบราว์เซอร์บล็อกหน้าต่างพิมพ์ กรุณาอนุญาต popup สำหรับเว็บนี้แล้วลองใหม่");
     return;
   }
@@ -184,5 +211,4 @@ export function openReplenishPrintWindow(data) {
   printWindow.document.write(html);
   printWindow.document.close();
   // การพิมพ์ถูก trigger ด้วย <body onload="window.print()"> ในตัว HTML เอง
-  // เพื่อรอให้ font/layout เรนเดอร์เสร็จก่อน ไม่ต้อง setTimeout เดาเวลาจากฝั่งนี้
 }
