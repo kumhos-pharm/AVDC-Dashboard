@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Warehouse, Search, PackagePlus, Send, Loader2, Pencil, Trash2, X, XCircle, AlertTriangle, SquarePen, Undo2, ShoppingCart } from "lucide-react";
+import { Warehouse, Search, PackagePlus, Send, Loader2, Pencil, Trash2, X, XCircle, AlertTriangle, SquarePen, Undo2, ShoppingCart, Check } from "lucide-react";
 import { useDrugsAndDepartments } from "./useDispense";
 import { useWarehouseLots, receiveStock, transferStock, removeStockLot, updateLotDetails, updateMinMax, useWarehouseMinMax, returnLotToWarehouse } from "./useWarehouse";
 import { findOrCreateDrug, updateDrug } from "./useDrugs";
@@ -571,6 +571,7 @@ function LotRow({ lot, departments, minMax, onDone, onEdit, editingKey, currentS
       expDate: lot.exp_date,
       sourceDeptId: lot.department_id,
       qty: qtyNum,
+      maxQty: lot.quantity,
       unitPrice: priceRow?.unit_price ?? null,
     });
 
@@ -796,6 +797,29 @@ export default function WarehousePage() {
     setCart((prev) => prev.filter((it) => it.key !== key));
   }
 
+  // ---- แก้ไขจำนวนของรายการที่อยู่ในตะกร้า (ไม่ต้องลบแล้วเพิ่มใหม่) ----
+  const [editingCartKey, setEditingCartKey] = useState(null);
+  const [editQtyValue, setEditQtyValue] = useState("");
+
+  function startEditCartItem(item) {
+    setEditingCartKey(item.key);
+    setEditQtyValue(String(item.qty));
+  }
+
+  function cancelEditCartItem() {
+    setEditingCartKey(null);
+    setEditQtyValue("");
+  }
+
+  function saveEditCartItem(item) {
+    const newQty = Number(editQtyValue);
+    if (!newQty || newQty <= 0) return alertError("จำนวนต้องมากกว่า 0");
+    if (item.maxQty != null && newQty > item.maxQty) return alertError(`จำนวนต้องไม่เกิน ${item.maxQty} (คงเหลือในคลัง)`);
+    setCart((prev) => prev.map((it) => (it.key === item.key ? { ...it, qty: newQty } : it)));
+    setEditingCartKey(null);
+    setEditQtyValue("");
+  }
+
   async function confirmCart() {
     if (!cartToDept) return alertError("กรุณาเลือกหน่วยงานปลายทางสำหรับตะกร้าก่อน");
     if (cart.length === 0) return;
@@ -918,11 +942,47 @@ export default function WarehousePage() {
                         {item.errorMessage && <span className="ml-2 text-[11px] font-normal text-red-500">({item.errorMessage})</span>}
                       </td>
                       <td className="p-2 text-slate-500">{item.lot}</td>
-                      <td className="p-2 text-center">{item.qty}</td>
                       <td className="p-2 text-center">
-                        <button onClick={() => removeFromCart(item.key)} className="text-red-400 hover:text-red-600" title="เอาออกจากตะกร้า">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        {editingCartKey === item.key ? (
+                          <input
+                            type="number"
+                            autoFocus
+                            value={editQtyValue}
+                            onChange={(e) => setEditQtyValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") saveEditCartItem(item);
+                              if (e.key === "Escape") cancelEditCartItem();
+                            }}
+                            className="w-20 rounded border border-indigo-300 px-2 py-1 text-center text-xs"
+                            min={1}
+                            max={item.maxQty ?? undefined}
+                          />
+                        ) : (
+                          item.qty
+                        )}
+                      </td>
+                      <td className="p-2 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          {editingCartKey === item.key ? (
+                            <>
+                              <button onClick={() => saveEditCartItem(item)} className="text-emerald-500 hover:text-emerald-700" title="บันทึกจำนวนใหม่">
+                                <Check className="h-3.5 w-3.5" />
+                              </button>
+                              <button onClick={cancelEditCartItem} className="text-slate-400 hover:text-slate-600" title="ยกเลิก">
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button onClick={() => startEditCartItem(item)} className="text-indigo-400 hover:text-indigo-600" title="แก้ไขจำนวน">
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button onClick={() => removeFromCart(item.key)} className="text-red-400 hover:text-red-600" title="เอาออกจากตะกร้า">
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
