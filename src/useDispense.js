@@ -93,12 +93,15 @@ export function useDispenseHistory(searchTerm) {
         drugIds.length > 0
           ? supabase.from("drugs").select("id, form, strength").in("id", drugIds)
           : Promise.resolve({ data: [] }),
-        // ดึง transfer_group_id ตรงจาก stock_movements ด้วย id เสมอ เผื่อ view ยังไม่มีคอลัมน์นี้
-        // (สาเหตุที่ปุ่ม "ยกเลิกการเติมยา" ใช้งานไม่ได้/เป็นสีเทาค้าง เพราะ r.transfer_group_id เป็น undefined ตลอด)
-        // ดึง created_at จาก stock_movements โดยตรงด้วย เพราะ view อาจไม่มีหรือค่าไม่ตรง
-        // ใช้ตอนแก้ไขรายการเพื่อคง created_at เดิมไว้ (ไม่ให้กลายเป็นวันที่แก้ไข)
+        // ดึง transfer_group_id, batch_group_id, created_at ตรงจาก stock_movements ด้วย id เสมอ
+        // เผื่อ view ยังไม่มีคอลัมน์นี้ (สาเหตุที่ปุ่ม "ยกเลิกการเติมยา" ใช้งานไม่ได้/เป็นสีเทาค้าง
+        // เพราะ r.transfer_group_id เป็น undefined ตลอด) — batch_group_id ใช้รวมยาหลายรายการที่จ่าย
+        // พร้อมกันในครั้งเดียวให้แสดงเป็นการ์ดเดียวในประวัติ
         rowIds.length > 0
-          ? supabase.from("stock_movements").select("id, transfer_group_id, created_at").in("id", rowIds)
+          ? supabase
+              .from("stock_movements")
+              .select("id, transfer_group_id, batch_group_id, created_at")
+              .in("id", rowIds)
           : Promise.resolve({ data: [] }),
       ]);
 
@@ -117,7 +120,13 @@ export function useDispenseHistory(searchTerm) {
       (drugRes.data ?? []).forEach((d) => drugMap.set(String(d.id), d));
 
       const movementMap = new Map();
-      (movementRes.data ?? []).forEach((m) => movementMap.set(m.id, { transfer_group_id: m.transfer_group_id, created_at: m.created_at }));
+      (movementRes.data ?? []).forEach((m) =>
+        movementMap.set(m.id, {
+          transfer_group_id: m.transfer_group_id,
+          batch_group_id: m.batch_group_id,
+          created_at: m.created_at,
+        })
+      );
 
       dispenseRows.forEach((r) => {
         if (r.lot_row_id && idMap.has(r.lot_row_id)) {
@@ -136,13 +145,37 @@ export function useDispenseHistory(searchTerm) {
         if (movementMap.has(r.id)) {
           const mv = movementMap.get(r.id);
           r.transfer_group_id = mv.transfer_group_id;
+          r.batch_group_id = mv.batch_group_id;
           // เขียนทับ created_at ด้วยค่าตรงจาก stock_movements เสมอ (แม่นยำกว่า view)
           if (mv.created_at) r.created_at = mv.created_at;
         }
       });
     }
 
-    setRows(dispenseRows);
+    // รวมรายการ "จ่ายยา" (ไม่รวม replenish) ที่มี batch_group_id เดียวกันให้เป็นการ์ดเดียว
+    // เพราะจ่ายพร้อมกันในครั้งเดียวจากตะกร้ายาหลายรายการ — เก็บยาแต่ละตัวไว้ใน r.items
+    // แถวที่ไม่มี batch_group_id (จ่ายทีละ 1 ยา หรือรายการเก่าก่อนมีฟีเจอร์นี้) แสดงแบบเดิมตามปกติ ไม่ถูกรวม
+    const groupedRows = [];
+    const seenBatchIds = new Set();
+
+    dispenseRows.forEach((r) => {
+      if (r.reason !== "dispense" || !r.batch_group_id) {
+        groupedRows.push(r);
+        return;
+      }
+      if (seenBatchIds.has(r.batch_group_id)) return; // ยาตัวถัดไปในกลุ่มเดียวกัน ถูกรวมไปแล้ว ข้ามได้เลย
+      seenBatchIds.add(r.batch_group_id);
+
+      const itemsInBatch = dispenseRows.filter((x) => x.batch_group_id === r.batch_group_id);
+      // ใช้แถวแรก (เรียงตาม created_at อยู่แล้วจาก query) เป็นตัวแทนของการ์ด แนบ items ทุกยาไว้ด้วย
+      groupedRows.push({
+        ...r,
+        isBatch: itemsInBatch.length > 1,
+        items: itemsInBatch,
+      });
+    });
+
+    setRows(groupedRows);
     setLoading(false);
   }, []);
 
@@ -152,9 +185,17 @@ export function useDispenseHistory(searchTerm) {
 
   const term = (searchTerm || "").trim().toLowerCase();
   const filtered = term
-    ? rows.filter((r) =>
-        [r.patient_name, r.patient_hn, r.drug_name].some((v) => (v || "").toLowerCase().includes(term))
-      )
+    ? rows.filter((r) => {
+        const basicMatch = [r.patient_name, r.patient_hn, r.drug_name].some((v) =>
+          (v || "").toLowerCase().includes(term)
+        );
+        if (basicMatch) return true;
+        // การ์ดที่รวมหลายยา (isBatch) ต้องค้นหาชื่อยาทุกตัวในกลุ่มด้วย ไม่ใช่แค่ยาตัวแรกที่เป็นตัวแทนการ์ด
+        if (r.isBatch && Array.isArray(r.items)) {
+          return r.items.some((it) => (it.drug_name || "").toLowerCase().includes(term));
+        }
+        return false;
+      })
     : rows;
 
   return { rows: filtered, loading, reload };
@@ -195,6 +236,16 @@ export async function submitDispense(payload) {
 // ลบรายการ (trigger จะคืนยอดสต็อกให้อัตโนมัติ)
 export async function deleteDispense(id) {
   const { error } = await supabase.from("stock_movements").delete().eq("id", id);
+  return { error };
+}
+
+// ลบทุกยาในกลุ่ม "ตะกร้าเดียวกัน" พร้อมกันทีเดียว (จ่ายหลายยาในครั้งเดียว ใช้ batch_group_id เชื่อมไว้)
+// trigger คืนสต็อกให้ทุกล็อตอัตโนมัติเหมือนการลบทีละแถวปกติ
+export async function deleteDispenseBatch(batchGroupId) {
+  if (!batchGroupId) {
+    return { error: new Error("ไม่พบรหัสกลุ่มรายการ (batch_group_id) ไม่สามารถลบทั้งกลุ่มได้") };
+  }
+  const { error } = await supabase.from("stock_movements").delete().eq("batch_group_id", batchGroupId);
   return { error };
 }
 

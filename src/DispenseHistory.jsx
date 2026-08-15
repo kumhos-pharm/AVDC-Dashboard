@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { History, Search, Pencil, Trash2, User, ChevronLeft, ChevronRight, ArrowRightLeft, RotateCcw } from "lucide-react";
 import Swal from "sweetalert2";
 import "sweetalert2/dist/sweetalert2.min.css";
-import { useDispenseHistory, deleteDispense, cancelReplenish } from "./useDispense";
+import { useDispenseHistory, deleteDispense, deleteDispenseBatch, cancelReplenish } from "./useDispense";
 
 // แปลงวันที่เป็น พ.ศ. และรูปแบบย่อตามภาพ (เช่น 9 ก.ค. 2569)
 function formatThaiDate(iso) {
@@ -119,6 +119,34 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
     }
 
     Swal.fire({ ...swalBase, icon: "success", title: "ลบรายการแล้ว", timer: 1500, showConfirmButton: false });
+    reload();
+  }
+
+  // ลบทุกยาในการ์ดที่รวมหลายรายการ (จ่ายพร้อมกันจากตะกร้า) พร้อมกันทีเดียว
+  async function handleDeleteBatch(r) {
+    const drugNames = (r.items || []).map((it) => it.drug_name).filter(Boolean).join(", ");
+    const result = await Swal.fire({
+      ...swalBase,
+      icon: "warning",
+      title: `ลบทั้ง ${r.items.length} รายการนี้ใช่ไหม?`,
+      html: `รายการจ่ายยา <b>${drugNames}</b> ของ <b>${r.patient_name || "-"}</b><br/>ยอดคงเหลือของทุกล็อตจะถูกคืนกลับอัตโนมัติ`,
+      showCancelButton: true,
+      confirmButtonText: `ลบทั้ง ${r.items.length} รายการ`,
+      cancelButtonText: "ยกเลิก",
+      confirmButtonColor: "#dc2626",
+      reverseButtons: true,
+    });
+
+    if (!result.isConfirmed) return;
+
+    const { error } = await deleteDispenseBatch(r.batch_group_id);
+
+    if (error) {
+      Swal.fire({ ...swalBase, icon: "error", title: "ลบไม่สำเร็จ", text: error.message });
+      return;
+    }
+
+    Swal.fire({ ...swalBase, icon: "success", title: "ลบทั้งกลุ่มแล้ว", timer: 1500, showConfirmButton: false });
     reload();
   }
 
@@ -283,9 +311,55 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
                         🏥 {r.department_name}
                       </span>
                     )}
+                    {r.isBatch && (
+                      <span className="rounded-full bg-amber-100 border border-amber-300 px-2 py-0.5 text-[11px] font-bold text-amber-700">
+                        💊 {r.items.length} รายการยา
+                      </span>
+                    )}
                   </div>
                 )}
 
+                {r.isBatch ? (
+                  /* การ์ดที่รวมหลายยา (จ่ายพร้อมกันจากตะกร้า) — แสดงเป็นรายการยาแต่ละตัวแทนแถวเดียว */
+                  <div className="space-y-1.5">
+                    {r.items.map((item) => (
+                      <div
+                        key={item.id}
+                        className="rounded-lg border border-slate-100 bg-slate-50/60 px-2.5 py-1.5"
+                      >
+                        <div className="text-sm font-extrabold text-[#1d68a4] flex flex-wrap items-center gap-1">
+                          🔗 {item.drug_name}
+                          {item.strength && (
+                            <span className="text-sm font-bold text-[#4a9bd1]">({item.strength})</span>
+                          )}
+                          {item.drug_form && (
+                            <span className="rounded-full bg-[#eaf4fb] px-2 py-0.5 text-[11px] font-semibold text-[#1d68a4]">
+                              {item.drug_form}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12px] text-slate-600 mt-0.5">
+                          <span>Lot: <span className="font-semibold text-slate-700">{item.lot || "-"}</span></span>
+                          <span>
+                            จ่าย: <span className="font-bold text-red-600">{Math.abs(item.change_qty)}</span>{" "}
+                            <span className="text-slate-500">{displayUnit(item)}</span>
+                          </span>
+                          <span>
+                            คงเหลือ:{" "}
+                            <span className="font-bold text-emerald-600">
+                              {remainingQty(item) !== null ? remainingQty(item) : "-"}
+                            </span>{" "}
+                            <span className="text-slate-500">{displayUnit(item)}</span>
+                          </span>
+                          <span className="ml-auto text-[11px] font-bold bg-red-50 text-red-600 px-1.5 py-0.5 rounded border border-red-100">
+                            Exp: {formatExpDate(item.exp_date)}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <>
                 {/* แถวที่ 2: ชื่อยา + ความแรงของยา + รูปแบบยา (เด่นสุดเป็นสีน้ำเงินตามภาพ) */}
                 <div className="text-sm font-extrabold text-[#1d68a4] flex flex-wrap items-center gap-1">
                   🔗 {r.drug_name}
@@ -324,6 +398,8 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
                     Exp: {formatExpDate(r.exp_date)}
                   </span>
                 </div>
+                  </>
+                )}
 
                 {/* แถวที่ 4: ผู้บันทึก/ผู้จ่าย */}
                 <div className="pt-1 border-t border-dashed border-slate-100 text-[12px] text-slate-500 flex items-center gap-1.5">
@@ -335,19 +411,23 @@ export default function DispenseHistory({ refreshKey, onEditRequest, editingId }
               {/* ปุ่ม Action ที่มุมขวาบน */}
               {!isReplenish ? (
                 <div className="absolute right-3 top-3 flex items-center gap-1.5">
+                  {/* การ์ดที่รวมหลายยา (isBatch) แก้ไขทีละยาผ่านฟอร์มเดียวไม่ได้ ซ่อนปุ่มแก้ไขไว้ก่อน
+                      ต้องการแก้ไขให้ลบทั้งกลุ่มแล้วจ่ายใหม่แทน */}
+                  {!r.isBatch && (
+                    <button
+                      type="button"
+                      onClick={() => onEditRequest && onEditRequest(r)}
+                      className="rounded border border-amber-300 p-1 text-amber-500 hover:bg-amber-50"
+                      title="แก้ไข (ไปแสดงในฟอร์มด้านข้าง)"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                   <button
                     type="button"
-                    onClick={() => onEditRequest && onEditRequest(r)}
-                    className="rounded border border-amber-300 p-1 text-amber-500 hover:bg-amber-50"
-                    title="แก้ไข (ไปแสดงในฟอร์มด้านข้าง)"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(r)}
+                    onClick={() => (r.isBatch ? handleDeleteBatch(r) : handleDelete(r))}
                     className="rounded border border-red-300 p-1 text-red-500 hover:bg-red-50"
-                    title="ลบ"
+                    title={r.isBatch ? `ลบทั้ง ${r.items.length} รายการ` : "ลบ"}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>

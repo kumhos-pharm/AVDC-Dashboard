@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Save, Info, X } from "lucide-react";
+import { Save, Info, X, Plus, Trash2, ShoppingCart } from "lucide-react";
 import Swal from "sweetalert2";
 import { supabase } from "./supabaseClient"; // ปรับ path ตามโครงสร้างจริงของคุณ
 import { updateDispense } from "./useDispense";
@@ -83,6 +83,10 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
   const [drugFetchError, setDrugFetchError] = useState("");
 
   const [loading, setLoading] = useState(false);
+
+  // ตะกร้ายาที่จะจ่ายให้ผู้ป่วยคนนี้ — จ่ายได้หลายรายการยาในการบันทึกครั้งเดียว
+  // แต่ละแถวเก็บยา+ล็อต+จำนวนที่เลือกไว้ ก่อนกด "บันทึกทั้งหมด" ทีเดียว (เฉพาะโหมดจ่ายยาปกติ ไม่ใช้ตอนเติมยา/แก้ไข)
+  const [cart, setCart] = useState([]);
 
   useEffect(() => {
     fetchDepartments();
@@ -198,6 +202,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
     if (nextMode === mode) return;
     setMode(nextMode);
     setDestDepartmentId("");
+    setCart([]); // ตะกร้าใช้เฉพาะโหมดจ่ายยาปกติ สลับโหมดแล้วต้องล้างทิ้ง
     setFormData((prev) => ({
       ...prev,
       prefix: "",
@@ -389,11 +394,86 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
       expDateRaw: "",
       maxQuantity: undefined,
     });
+    setCart([]);
   };
 
   const handleCancelEdit = () => {
     resetForm();
     if (onCancelEdit) onCancelEdit();
+  };
+
+  // เพิ่มยาที่เลือกอยู่ในฟอร์มลงตะกร้า แล้วล้างช่องเลือกยาให้พร้อมเลือกตัวถัดไปทันที
+  const addToCart = () => {
+    if (!formData.drugId || !formData.lotRowId) {
+      alert("กรุณาเลือกรายการยาก่อนเพิ่มลงตะกร้า");
+      return;
+    }
+    const qty = parseInt(formData.quantity);
+    if (!qty || qty <= 0) {
+      alert("กรุณาระบุจำนวนที่จ่ายให้ถูกต้อง");
+      return;
+    }
+    if (formData.maxQuantity !== undefined && qty > formData.maxQuantity) {
+      alert(`ยอดสต็อกไม่พอจ่าย (คงเหลือ: ${formData.maxQuantity})`);
+      return;
+    }
+
+    setCart((prev) => {
+      // กันการเพิ่มล็อตเดียวกันซ้ำ — ถ้ามีอยู่แล้วในตะกร้าให้รวมจำนวนแทนที่จะเพิ่มแถวใหม่
+      const existingIdx = prev.findIndex((it) => it.lotRowId === formData.lotRowId);
+      if (existingIdx >= 0) {
+        const newQty = prev[existingIdx].quantity + qty;
+        if (formData.maxQuantity !== undefined && newQty > formData.maxQuantity) {
+          alert(`ยอดสต็อกไม่พอจ่าย รวมกับที่มีในตะกร้าแล้ว (คงเหลือ: ${formData.maxQuantity})`);
+          return prev;
+        }
+        const merged = [...prev];
+        merged[existingIdx] = { ...merged[existingIdx], quantity: newQty };
+        return merged;
+      }
+      return [
+        ...prev,
+        {
+          drugId: formData.drugId,
+          lotRowId: formData.lotRowId,
+          drugName: formData.searchDrug,
+          strength: formData.strength,
+          drugType: formData.drugType,
+          unit: formData.unit,
+          lotNumber: formData.lotNumber,
+          mfgDateRaw: formData.mfgDateRaw,
+          expDateRaw: formData.expDateRaw,
+          mfgDate: formData.mfgDate,
+          expDate: formData.expDate,
+          quantity: qty,
+          maxQuantity: formData.maxQuantity,
+          unitPrice: formData.unitPrice,
+        },
+      ];
+    });
+
+    // ล้างเฉพาะช่องเลือกยา เตรียมพร้อมให้เลือกยาตัวถัดไปทันที
+    setFormData((prev) => ({
+      ...prev,
+      searchDrug: "",
+      drugId: "",
+      lotRowId: "",
+      strength: "",
+      drugType: "",
+      unit: "",
+      lotNumber: "",
+      quantity: "",
+      mfgDate: "",
+      expDate: "",
+      mfgDateRaw: "",
+      expDateRaw: "",
+      maxQuantity: undefined,
+      unitPrice: null,
+    }));
+  };
+
+  const removeFromCart = (lotRowId) => {
+    setCart((prev) => prev.filter((it) => it.lotRowId !== lotRowId));
   };
 
   // URL ของ Google Apps Script (Web App) เดิมที่มีบอทไลน์ + Token/Group ID ตั้งค่าไว้อยู่แล้ว
@@ -439,6 +519,31 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
     lines.push(
       `🏷️ Lot: ${formData.lotNumber || "-"}`,
       `📅 EXP: ${formData.expDate || "-"}`,
+      "------------------------------",
+      `👤 ผู้บันทึก: ${formData.staff || "-"}`
+    );
+    return lines.join("\n");
+  };
+
+  // สร้างข้อความสรุปรายการจ่ายยา "หลายรายการ" สำหรับส่งเข้ากลุ่มไลน์ (ใช้แทน buildDispenseMessage เดิม
+  // ซึ่งรองรับแค่ 1 รายการ) — วนลูปแสดงทุกยาที่จ่ายในครั้งนี้ต่อจากข้อมูลผู้ป่วย
+  const buildMultiDispenseMessage = (items) => {
+    const deptName = departments.find((d) => String(d.id) === String(departmentId))?.name || "-";
+    const lines = [
+      "📢 บันทึกจ่ายยาใหม่! 💊",
+      "------------------------------",
+      `🏥 หน่วยงาน: ${deptName}`,
+      `👤 ผู้ป่วย: ${formData.prefix}${formData.patientName || "-"}`,
+      `🆔 HN: ${formData.hn || "-"}`,
+      "------------------------------",
+      `รายการยา (${items.length} รายการ):`,
+    ];
+    items.forEach((item) => {
+      lines.push(
+        `🔹 ${item.drugName || "-"}${item.strength ? ` (${item.strength})` : ""} | จ่าย: ${item.quantity} ${item.unit || ""} | Lot: ${item.lotNumber || "-"}`
+      );
+    });
+    lines.push(
       "------------------------------",
       `👤 ผู้บันทึก: ${formData.staff || "-"}`
     );
@@ -719,63 +824,96 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
       return;
     }
 
+    // โหมดจ่ายยาให้ผู้ป่วย (ปกติ) — รองรับจ่ายได้หลายรายการยาในการบันทึกครั้งเดียวผ่าน "ตะกร้า"
+    // ถ้ายังไม่ได้กด "เพิ่มลงตะกร้า" แต่กรอกยาไว้ในฟอร์มครบแล้ว ให้ถือว่าเป็นรายการเดียวและจ่ายไปเลย
+    // (ไม่บังคับต้องกดเพิ่มตะกร้าเสมอไป เผื่อกรณีจ่ายแค่ยาตัวเดียว)
+    let itemsToSubmit = cart;
+    if (itemsToSubmit.length === 0 && formData.drugId && formData.lotRowId && formData.quantity) {
+      itemsToSubmit = [
+        {
+          drugId: formData.drugId,
+          lotRowId: formData.lotRowId,
+          drugName: formData.searchDrug,
+          strength: formData.strength,
+          drugType: formData.drugType,
+          unit: formData.unit,
+          lotNumber: formData.lotNumber,
+          mfgDateRaw: formData.mfgDateRaw,
+          expDateRaw: formData.expDateRaw,
+          mfgDate: formData.mfgDate,
+          expDate: formData.expDate,
+          quantity: parseInt(formData.quantity),
+          maxQuantity: formData.maxQuantity,
+          unitPrice: formData.unitPrice,
+        },
+      ];
+    }
+
     if (
       !departmentId ||
       !formData.patientName ||
       !formData.hn ||
       !formData.staff ||
-      !formData.lotRowId ||
-      !formData.quantity
+      itemsToSubmit.length === 0
     ) {
-      alert("กรุณากรอกข้อมูลสำคัญให้ครบถ้วน (หน่วยงาน, ผู้ป่วย, HN, ผู้จ่าย, รายการยา, จำนวน)");
+      alert("กรุณากรอกข้อมูลสำคัญให้ครบถ้วน (หน่วยงาน, ผู้ป่วย, HN, ผู้จ่าย, รายการยาอย่างน้อย 1 รายการ)");
       return;
     }
 
-    const dispenseQty = parseInt(formData.quantity);
-    if (dispenseQty <= 0) {
-      alert("จำนวนที่จ่ายต้องมากกว่า 0");
-      return;
-    }
-
-    if (dispenseQty > formData.maxQuantity) {
-      alert(`ยอดสต็อกไม่พอจ่าย (คงเหลือ: ${formData.maxQuantity})`);
-      return;
+    // ตรวจสอบจำนวนของทุกรายการในตะกร้าอีกครั้งก่อนบันทึกจริง (กันสต็อกไม่พอ)
+    for (const item of itemsToSubmit) {
+      if (!item.quantity || item.quantity <= 0) {
+        alert(`จำนวนที่จ่ายของ "${item.drugName}" ต้องมากกว่า 0`);
+        return;
+      }
+      if (item.maxQuantity !== undefined && item.quantity > item.maxQuantity) {
+        alert(`ยอดสต็อกไม่พอจ่าย "${item.drugName}" (คงเหลือ: ${item.maxQuantity})`);
+        return;
+      }
     }
 
     setLoading(true);
 
     try {
-      // 1. บันทึกประวัติการจ่ายยาลง stock_movements (change_qty ติดลบ = จ่ายออก)
-      const { error: insertError } = await supabase
-        .from("stock_movements")
-        .insert([
-          {
-            drug_id: formData.drugId,
-            department_id: departmentId,
-            change_qty: -dispenseQty,
-            reason: "dispense",
-            note: null,
-            staff_name: formData.staff,
-            lot: formData.lotNumber,
-            lot_row_id: formData.lotRowId,
-            mfg_date: formData.mfgDateRaw || null,
-            exp_date: formData.expDateRaw || null,
-            patient_prefix: formData.prefix,
-            patient_name: formData.patientName,
-            patient_hn: formData.hn,
-            // ราคาต่อหน่วยของล็อตนี้ ณ ตอนจ่ายจริง (ใช้คำนวณมูลค่าจ่ายยาในหน้ารายงาน)
-            unit_price: formData.unitPrice,
-          },
-        ]);
+      // ใช้ batch_group_id เชื่อมทุกยาที่จ่ายพร้อมกันในครั้งนี้ (เหมือน transfer_group_id ของโหมดเติมยา)
+      // ถ้าจ่ายรายการเดียวก็ยังใส่ไว้ได้ ไม่มีผลเสีย แต่ฝั่งแสดงผลจะรวมเป็นการ์ดเดียวก็ต่อเมื่อมี > 1 รายการ
+      const batchGroupId = itemsToSubmit.length > 1 ? crypto.randomUUID() : null;
 
+      // 1. บันทึกประวัติการจ่ายยาทุกรายการในตะกร้าลง stock_movements ในคำสั่งเดียว (batch insert)
+      // change_qty ติดลบเสมอ = จ่ายออก — ทุกแถวใช้ข้อมูลผู้ป่วย/หน่วยงาน/ผู้จ่ายชุดเดียวกัน ต่างกันแค่ยา/ล็อต/จำนวน
+      const rows = itemsToSubmit.map((item) => ({
+        drug_id: item.drugId,
+        department_id: departmentId,
+        change_qty: -item.quantity,
+        reason: "dispense",
+        note: null,
+        staff_name: formData.staff,
+        lot: item.lotNumber,
+        lot_row_id: item.lotRowId,
+        mfg_date: item.mfgDateRaw || null,
+        exp_date: item.expDateRaw || null,
+        patient_prefix: formData.prefix,
+        patient_name: formData.patientName,
+        patient_hn: formData.hn,
+        unit_price: item.unitPrice,
+        batch_group_id: batchGroupId,
+      }));
+
+      const { error: insertError } = await supabase.from("stock_movements").insert(rows);
       if (insertError) throw insertError;
 
-      // 2. หักยอดสต็อกของ "ล็อตนี้" ทำโดย trigger `trg_apply_stock_movement` อัตโนมัติ
-      // (ทำงานตอน insert แถวข้างบนไปแล้ว) — ไม่ต้อง .update() drug_lots เองอีก มิเช่นนั้นจะหักซ้ำ 2 เด้ง
-      const newQuantity = formData.maxQuantity - dispenseQty; // ใช้แค่โชว์ในข้อความแจ้งเตือนเท่านั้น ไม่ได้เขียนลง DB
+      // 2. หักยอดสต็อกของทุกล็อตทำโดย trigger `trg_apply_stock_movement` อัตโนมัติ (ทำงานตอน insert ข้างบน)
+      // ไม่ต้อง .update() drug_lots เองอีก มิเช่นนั้นจะหักซ้ำ 2 เด้ง
 
-      Swal.fire({ ...swalBase, icon: "success", title: "บันทึกสำเร็จ", text: "บันทึกข้อมูลและตัดสต็อกเรียบร้อยแล้ว", timer: 1500, showConfirmButton: false });
-      notifyLine(buildDispenseMessage(dispenseQty, newQuantity));
+      Swal.fire({
+        ...swalBase,
+        icon: "success",
+        title: "บันทึกสำเร็จ",
+        text: `บันทึกข้อมูลและตัดสต็อกเรียบร้อยแล้ว (${itemsToSubmit.length} รายการ)`,
+        timer: 1500,
+        showConfirmButton: false,
+      });
+      notifyLine(buildMultiDispenseMessage(itemsToSubmit));
 
       resetForm();
       fetchDrugs(departmentId);
@@ -1126,13 +1264,63 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
           </div>
         </div>
 
+        {/* ปุ่ม "เพิ่มลงตะกร้า" — เฉพาะโหมดจ่ายยาปกติ (ไม่ใช้ตอนแก้ไขรายการเดิม หรือเติมยาหน่วยงาน) */}
+        {mode === "dispense" && !isEditMode && (
+          <button
+            type="button"
+            onClick={addToCart}
+            disabled={!formData.drugId || !formData.quantity}
+            className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#007bff]/50 py-2.5 text-sm font-bold text-[#007bff] hover:bg-blue-50 active:scale-[0.99] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Plus className="h-4 w-4" /> เพิ่มรายการยานี้ลงตะกร้า
+          </button>
+        )}
+
+        {/* ตะกร้ายาที่รอบันทึก — แสดงเฉพาะเมื่อมีรายการอยู่ในตะกร้า */}
+        {mode === "dispense" && !isEditMode && cart.length > 0 && (
+          <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3 space-y-2">
+            <div className="flex items-center gap-1.5 text-sm font-bold text-[#0056b3]">
+              <ShoppingCart className="h-4 w-4" /> ตะกร้ายา ({cart.length} รายการ)
+            </div>
+            {cart.map((item) => (
+              <div
+                key={item.lotRowId}
+                className="flex items-center justify-between gap-2 rounded-lg bg-white border border-blue-100 px-3 py-2 text-sm"
+              >
+                <div className="min-w-0">
+                  <span className="font-bold text-slate-800">{item.drugName}</span>
+                  {item.strength && <span className="text-slate-500"> ({item.strength})</span>}
+                  <div className="text-[12px] text-slate-500">
+                    Lot: {item.lotNumber || "-"} | จ่าย: <span className="font-bold text-[#007bff]">{item.quantity}</span> {item.unit || ""}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeFromCart(item.lotRowId)}
+                  className="shrink-0 rounded-lg p-1.5 text-red-500 hover:bg-red-50 active:scale-95 transition-all"
+                  title="ลบออกจากตะกร้า"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* ปุ่มบันทึกข้อมูลและตัดสต็อก */}
         <button
           type="submit"
           disabled={loading}
           className="w-full mt-4 flex items-center justify-center gap-2 rounded-xl bg-[#007bff] py-3 text-base font-bold text-white shadow-sm hover:bg-[#0069d9] active:scale-[0.99] transition-all disabled:opacity-50 h-12"
         >
-          <Save className="h-5 w-5" /> {loading ? "กำลังบันทึก..." : mode === "replenish" ? "บันทึกการเติมยาหน่วยงาน" : "บันทึกข้อมูลและตัดสต็อก"}
+          <Save className="h-5 w-5" />
+          {loading
+            ? "กำลังบันทึก..."
+            : mode === "replenish"
+            ? "บันทึกการเติมยาหน่วยงาน"
+            : cart.length > 0
+            ? `บันทึกข้อมูลและตัดสต็อก (${cart.length}${formData.drugId && formData.quantity ? " + 1" : ""} รายการ)`
+            : "บันทึกข้อมูลและตัดสต็อก"}
         </button>
 
       </form>
