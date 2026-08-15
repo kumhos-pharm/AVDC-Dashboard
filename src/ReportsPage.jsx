@@ -12,6 +12,8 @@ import {
   Wallet,
   CalendarRange,
   Layers,
+  Pill,
+  ListOrdered,
 } from "lucide-react";
 import { useAvdcData } from "./useAvdcData";
 import { supabase } from "./supabaseClient";
@@ -85,10 +87,12 @@ const REPORT_TYPES = [
   { key: "expiring", label: "ยาใกล้หมดอายุ", desc: "ยาที่เหลืออายุไม่เกิน 90 วัน", icon: Clock },
   { key: "dispense_by_dept", label: "มูลค่าจ่ายยาแยกหน่วยงาน", desc: "สรุปจำนวนและมูลค่ายาที่จ่ายไป แยกตามหน่วยงาน ตามช่วงวันที่", icon: Wallet },
   { key: "dispense_by_dept_detail", label: "จ่ายยารายหน่วยงาน (รายการ)", desc: "แต่ละหน่วยงานจ่ายยาอะไรไปบ้าง พร้อมจำนวนและมูลค่าต่อรายการ", icon: Layers },
+  { key: "dispense_by_drug", label: "จ่ายยาตามรายชื่อยา", desc: "ยาตัวไหนถูกจ่ายไปมาก/มูลค่าสูงสุด มองภาพรวมทุกหน่วยงาน", icon: Pill },
+  { key: "dispense_detail", label: "รายละเอียดรายธุรกรรม", desc: "ประวัติการจ่ายยาทุกรายการ เรียงตามวันที่ ไว้ตรวจสอบย้อนหลัง", icon: ListOrdered },
 ];
 
 // รายงานกลุ่มนี้ดึงจาก stock_movements (มีวันที่จ่ายจริง) ต่างจาก 3 รายงานแรกที่ดึงจากยอดคงคลังปัจจุบัน
-const DATE_FILTERED_REPORTS = ["dispense_by_dept", "dispense_by_dept_detail"];
+const DATE_FILTERED_REPORTS = ["dispense_by_dept", "dispense_by_dept_detail", "dispense_by_drug", "dispense_detail"];
 
 export default function ReportsPage() {
   const { loading, departments, drugRows, expiringLots, lotsByDrugDept } = useAvdcData();
@@ -125,7 +129,9 @@ export default function ReportsPage() {
 
     supabase
       .from("stock_movements")
-      .select("id, change_qty, unit_price, created_at, department_id, drug_id, departments(name), drugs(name, strength, form)")
+      .select(
+        "id, change_qty, unit_price, created_at, department_id, drug_id, lot, staff_name, patient_prefix, patient_name, patient_hn, departments(name), drugs(name, strength, form)"
+      )
       .eq("reason", "dispense")
       .gte("created_at", dateFrom.toISOString())
       .lte("created_at", dateTo.toISOString())
@@ -222,6 +228,77 @@ export default function ReportsPage() {
     { key: "lineValue", label: "มูลค่า (บาท)", align: "right", width: "15%" },
   ];
 
+  // ---------- รายงาน 6: จ่ายยาตามรายชื่อยา (มองภาพรวมทุกหน่วยงาน) ----------
+  const dispenseByDrugRows = useMemo(() => {
+    if (reportType !== "dispense_by_drug") return [];
+    const map = {};
+    dispenseRaw.forEach((r) => {
+      const deptName = r.departments?.name || "ไม่ระบุหน่วยงาน";
+      if (filterDept !== "all" && deptName !== filterDept) return;
+      const drugName = r.drugs?.name || "-";
+      if (!map[drugName]) {
+        map[drugName] = {
+          drugName,
+          strength: r.drugs?.strength || "-",
+          form: r.drugs?.form || "-",
+          txCount: 0,
+          totalQty: 0,
+          totalValue: 0,
+          missingPriceCount: 0,
+          deptSet: new Set(),
+        };
+      }
+      const qty = Math.abs(r.change_qty || 0);
+      map[drugName].txCount += 1;
+      map[drugName].totalQty += qty;
+      map[drugName].deptSet.add(deptName);
+      if (r.unit_price != null) {
+        map[drugName].totalValue += qty * r.unit_price;
+      } else {
+        map[drugName].missingPriceCount += 1;
+      }
+    });
+    const rows = Object.values(map).sort((a, b) => b.totalValue - a.totalValue);
+    const grandValue = rows.reduce((sum, r) => sum + r.totalValue, 0);
+    return rows.map((r) => ({
+      drugName: r.drugName,
+      strength: r.strength,
+      form: r.form,
+      txCount: r.txCount,
+      deptCount: r.deptSet.size,
+      totalQty: r.totalQty,
+      totalValue: r.totalValue.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      percentOfTotal: grandValue > 0 ? `${((r.totalValue / grandValue) * 100).toFixed(1)}%` : "-",
+      missingPriceCount: r.missingPriceCount > 0 ? r.missingPriceCount : "-",
+    }));
+  }, [dispenseRaw, reportType, filterDept]);
+
+  // ---------- รายงาน 7: รายละเอียดรายธุรกรรม (flat list เรียงตามวันที่ล่าสุดก่อน — ไว้ตรวจสอบย้อนหลัง) ----------
+  const dispenseDetailFlatRows = useMemo(() => {
+    if (reportType !== "dispense_detail") return [];
+    const rows = dispenseRaw
+      .filter((r) => filterDept === "all" || r.departments?.name === filterDept)
+      .map((r) => {
+        const qty = Math.abs(r.change_qty || 0);
+        const lineValue = r.unit_price != null ? qty * r.unit_price : null;
+        const patient = [r.patient_prefix, r.patient_name].filter(Boolean).join("") || "-";
+        return {
+          date: thaiDateShort(r.created_at),
+          deptName: r.departments?.name || "-",
+          drugName: r.drugs?.name || "-",
+          strength: r.drugs?.strength || "-",
+          lot: r.lot || "-",
+          qty,
+          patient: r.patient_hn ? `${patient} (${r.patient_hn})` : patient,
+          staffName: r.staff_name || "-",
+          unitPrice: r.unit_price != null ? r.unit_price.toLocaleString("th-TH", { minimumFractionDigits: 2 }) : "-",
+          lineValue: lineValue != null ? lineValue.toLocaleString("th-TH", { minimumFractionDigits: 2 }) : "-",
+          _sortDate: r.created_at,
+        };
+      });
+    return rows.sort((a, b) => new Date(b._sortDate) - new Date(a._sortDate));
+  }, [dispenseRaw, reportType, filterDept]);
+
   // ---------- รายงาน 1: คงคลังตามหน่วยงาน ----------
   const stockRows = useMemo(() => {
     const rows = [];
@@ -306,6 +383,8 @@ export default function ReportsPage() {
     reportType === "watch" ? watchRows :
     reportType === "dispense_by_dept" ? dispenseByDeptRows :
     reportType === "dispense_by_dept_detail" ? dispenseDetailGroups.flatMap((g) => g.items.map((it) => ({ deptName: g.deptName, ...it }))) :
+    reportType === "dispense_by_drug" ? dispenseByDrugRows :
+    reportType === "dispense_detail" ? dispenseDetailFlatRows :
     expiringRows;
 
   const columns =
@@ -343,6 +422,30 @@ export default function ReportsPage() {
           { key: "totalValue", label: "มูลค่ารวม (บาท)", align: "right", width: "20%" },
           { key: "percentOfTotal", label: "% ของยอดรวม", align: "right", width: "14%" },
           { key: "missingPriceCount", label: "รายการไม่มีราคา", align: "right", width: "14%" },
+        ]
+      : reportType === "dispense_by_drug"
+      ? [
+          { key: "drugName", label: "ชื่อยา", width: "20%" },
+          { key: "strength", label: "ความแรง", width: "8%" },
+          { key: "form", label: "รูปแบบยา", width: "9%" },
+          { key: "txCount", label: "จำนวนรายการ", align: "right", width: "10%" },
+          { key: "deptCount", label: "จ่ายกี่หน่วยงาน", align: "right", width: "10%" },
+          { key: "totalQty", label: "จำนวนหน่วยรวม", align: "right", width: "13%" },
+          { key: "totalValue", label: "มูลค่ารวม (บาท)", align: "right", width: "16%" },
+          { key: "percentOfTotal", label: "% ของยอดรวม", align: "right", width: "14%" },
+        ]
+      : reportType === "dispense_detail"
+      ? [
+          { key: "date", label: "วันที่จ่าย", width: "10%" },
+          { key: "deptName", label: "หน่วยงาน", width: "12%" },
+          { key: "drugName", label: "ชื่อยา", width: "16%" },
+          { key: "strength", label: "ความแรง", width: "7%" },
+          { key: "lot", label: "Lot", width: "9%" },
+          { key: "qty", label: "จำนวน", align: "right", width: "6%" },
+          { key: "patient", label: "ผู้ป่วย (HN)", width: "13%" },
+          { key: "staffName", label: "ผู้จ่าย", width: "9%" },
+          { key: "unitPrice", label: "ราคา/หน่วย", align: "right", width: "9%" },
+          { key: "lineValue", label: "มูลค่า (บาท)", align: "right", width: "9%" },
         ]
       : [
           { key: "drugName", label: "ชื่อยา", width: "24%" },
