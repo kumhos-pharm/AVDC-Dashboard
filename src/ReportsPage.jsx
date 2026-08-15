@@ -273,6 +273,30 @@ export default function ReportsPage() {
     }));
   }, [dispenseRaw, reportType, filterDept]);
 
+  // แถวรวมท้ายตาราง (subtotal) ของรายงาน "จ่ายยาตามรายชื่อยา" — คำนวณแยกจาก rows ข้างบนเพื่อเก็บผลรวมดิบไว้ก่อนแปลงเป็นข้อความ
+  const dispenseByDrugTotals = useMemo(() => {
+    if (reportType !== "dispense_by_drug") return null;
+    let txCount = 0;
+    let totalQty = 0;
+    let totalValue = 0;
+    const drugSet = new Set();
+    dispenseRaw.forEach((r) => {
+      const deptName = r.departments?.name || "ไม่ระบุหน่วยงาน";
+      if (filterDept !== "all" && deptName !== filterDept) return;
+      const qty = Math.abs(r.change_qty || 0);
+      txCount += 1;
+      totalQty += qty;
+      drugSet.add(r.drugs?.name || "-");
+      if (r.unit_price != null) totalValue += qty * r.unit_price;
+    });
+    return {
+      drugCount: drugSet.size,
+      txCount,
+      totalQty,
+      totalValueText: totalValue.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    };
+  }, [dispenseRaw, reportType, filterDept]);
+
   // ---------- รายงาน 7: รายละเอียดรายธุรกรรม (flat list เรียงตามวันที่ล่าสุดก่อน — ไว้ตรวจสอบย้อนหลัง) ----------
   const dispenseDetailFlatRows = useMemo(() => {
     if (reportType !== "dispense_detail") return [];
@@ -481,6 +505,18 @@ export default function ReportsPage() {
       columns.map((c) => c.label),
       ...activeRows.map((r) => columns.map((c) => r[c.key])),
     ];
+    if (reportType === "dispense_by_drug" && dispenseByDrugTotals && activeRows.length > 0) {
+      wsData.push([
+        `รวมทั้งหมด (${dispenseByDrugTotals.drugCount} ชนิดยา)`,
+        "",
+        "",
+        dispenseByDrugTotals.txCount,
+        "",
+        dispenseByDrugTotals.totalQty,
+        dispenseByDrugTotals.totalValueText,
+        "100.0%",
+      ]);
+    }
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     ws["!cols"] = columns.map(() => ({ wch: 20 }));
     const wb = XLSX.utils.book_new();
@@ -775,6 +811,18 @@ export default function ReportsPage() {
                       ))}
                     </tr>
                   ))
+                )}
+                {reportType === "dispense_by_drug" && dispenseByDrugTotals && activeRows.length > 0 && (
+                  <tr className="bg-slate-50 font-bold break-inside-avoid print:break-inside-avoid">
+                    <td colSpan={3} className="border border-slate-200 px-2.5 py-1.5">
+                      รวมทั้งหมด ({dispenseByDrugTotals.drugCount} ชนิดยา)
+                    </td>
+                    <td className="border border-slate-200 px-2.5 py-1.5 text-right">{dispenseByDrugTotals.txCount.toLocaleString("th-TH")}</td>
+                    <td className="border border-slate-200 px-2.5 py-1.5"></td>
+                    <td className="border border-slate-200 px-2.5 py-1.5 text-right">{dispenseByDrugTotals.totalQty.toLocaleString("th-TH")}</td>
+                    <td className="border border-slate-200 px-2.5 py-1.5 text-right">{dispenseByDrugTotals.totalValueText}</td>
+                    <td className="border border-slate-200 px-2.5 py-1.5 text-right">100.0%</td>
+                  </tr>
                 )}
               </tbody>
             </table>
