@@ -21,6 +21,27 @@ const getCurrentTimeStr = () => {
   return `${hh}:${mi}`;
 };
 
+// ดึงหน่วยนับที่ถูกต้องจาก "รูปแบบยา" แทนคอลัมน์ unit ของ drugs เพราะ unit ไม่เคยถูกตั้งค่าจากหน้า UI ไหนเลย
+// (ไม่มีช่องกรอก unit ในฟอร์มรับยา/แก้ไขยา) ทำให้ค่าเดิมในฐานข้อมูลเป็นค่า default ทั่วไปที่ไม่ตรงกับรูปแบบยาจริง
+// (logic เดียวกับ DispenseHistory.jsx — ต้อง sync กันไว้ ถ้าแก้ที่นี่ให้ไปแก้อีกไฟล์ด้วย)
+const FORM_UNIT_MAP = {
+  "ยาฉีด (Ampoule)": "แอมพูล",
+  "ยาฉีด (Vial)": "ขวด",
+  "ซอง (Powder)": "ซอง",
+  "ขวด": "ขวด",
+};
+const ENGLISH_FORM_GUESS = { powder: "ซอง", vial: "ขวด", ampoule: "แอมพูล", tablet: "เม็ด", capsule: "แคปซูล" };
+function unitFromForm(form) {
+  if (!form) return null;
+  if (FORM_UNIT_MAP[form]) return FORM_UNIT_MAP[form];
+  const match = form.match(/\(([^)]+)\)/);
+  if (match) {
+    const guess = ENGLISH_FORM_GUESS[match[1].trim().toLowerCase()];
+    return guess || null;
+  }
+  return form.trim() || null;
+}
+
 // ตั้งค่าธีมสีของ SweetAlert ให้เข้ากับฟอนต์/โทนสีของระบบ
 const swalBase = {
   confirmButtonColor: "#007bff",
@@ -123,7 +144,8 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
       lotRowId: "",
       strength: editingRow.strength || "",
       drugType: editingRow.drug_form || editingRow.form || "",
-      unit: editingRow.unit || "",
+      // ใช้หน่วยนับที่แปลงจาก "รูปแบบยา" ก่อนเสมอ (แม่นยำกว่า editingRow.unit ดิบที่มาจาก DB โดยตรง)
+      unit: unitFromForm(editingRow.drug_form || editingRow.form) || editingRow.unit || "",
       lotNumber: editingRow.lot || "",
       quantity: String(Math.abs(editingRow.change_qty ?? 0)),
       mfgDate: formatDate(editingRow.mfg_date),
@@ -323,7 +345,8 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
       lotRowId: drug.lot_row_id,
       strength: drug.strength || "",
       drugType: drug.form || "",
-      unit: drug.unit || "",
+      // ใช้หน่วยนับที่แปลงจาก "รูปแบบยา" ก่อนเสมอ (แม่นยำกว่า) แล้วค่อย fallback ไปที่ drug.unit ดิบจาก DB
+      unit: unitFromForm(drug.form) || drug.unit || "",
       lotNumber: drug.lot || "",
       mfgDate: formatDate(drug.mfg_date),
       expDate: formatDate(drug.exp_date),
@@ -1193,7 +1216,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
                     idx === drugHighlightIndex ? "bg-blue-50" : "hover:bg-blue-50"
                   }`}
                 >
-                  <span className="text-emerald-600 font-bold">[คงเหลือ: {drug.quantity} {drug.unit || "หน่วย"}]</span>
+                  <span className="text-emerald-600 font-bold">[คงเหลือ: {drug.quantity} {unitFromForm(drug.form) || drug.unit || "หน่วย"}]</span>
                   {" "}
                   <span className="text-slate-800">{drug.drug_name}</span>
                   {drug.strength && <span className="text-slate-500"> ({drug.strength})</span>}
