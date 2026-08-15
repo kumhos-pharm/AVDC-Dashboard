@@ -523,25 +523,26 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
     removeFromCart(item.lotRowId);
   };
 
-  // URL ของ Google Apps Script (Web App) เดิมที่มีบอทไลน์ + Token/Group ID ตั้งค่าไว้อยู่แล้ว
-  const GAS_NOTIFY_URL =
-    "https://script.google.com/macros/s/AKfycbz89_ykuKC-dXAYsXjgH9tOSq8Dpf35uZGKDCN_Ar_GDt3JJTaPKDIZ8B06HaHgpZXX6A/exec";
+  // Supabase Edge Function สำหรับส่งแจ้งเตือน LINE + Telegram
+  // (เปลี่ยนจาก Google Apps Script แล้ว — รองรับ CORS + ดูผลลัพธ์ได้จริง)
+  const NOTIFY_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/notify`;
 
-  // ส่งข้อความแจ้งเตือนเข้ากลุ่มไลน์ผ่าน Apps Script เดิม (ไม่บล็อกการบันทึก ถ้าส่งไม่สำเร็จแค่ log error ไว้เฉยๆ)
-  // ใช้ mode: "no-cors" เพราะ Apps Script Web App ไม่ส่ง Access-Control-Allow-Origin กลับมา
-  // ทำให้เบราว์เซอร์บล็อกการอ่าน response (แม้คำขอจะไปถึงเซิร์ฟเวอร์และทำงานจริงก็ตาม)
-  // ข้อแลกเปลี่ยน: จะอ่านผลลัพธ์สำเร็จ/ไม่สำเร็จจริงจากฝั่ง React ไม่ได้อีกต่อไป (response กลายเป็น opaque)
-  // แต่ไม่กระทบอะไร เพราะจุดประสงค์คือแค่ให้ข้อความไปถึงกลุ่มไลน์เท่านั้น
   const notifyLine = async (text) => {
     try {
-      await fetch(GAS_NOTIFY_URL, {
+      const res = await fetch(NOTIFY_URL, {
         method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
         body: JSON.stringify({ message: text }),
       });
+      const result = await res.json();
+      if (!result.success) {
+        console.warn("แจ้งเตือนบางช่องทางไม่สำเร็จ:", result);
+      }
     } catch (err) {
-      console.error("แจ้งเตือนเข้า LINE ไม่สำเร็จ:", err.message);
+      console.error("แจ้งเตือนไม่สำเร็จ:", err.message);
     }
   };
 
