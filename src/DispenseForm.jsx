@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Save, Info, X, Plus, Trash2, ShoppingCart } from "lucide-react";
+import { Save, Info, X, Plus, Trash2, ShoppingCart, Pencil } from "lucide-react";
 import Swal from "sweetalert2";
 import { supabase } from "./supabaseClient"; // ปรับ path ตามโครงสร้างจริงของคุณ
 import { updateDispense } from "./useDispense";
@@ -474,6 +474,30 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
 
   const removeFromCart = (lotRowId) => {
     setCart((prev) => prev.filter((it) => it.lotRowId !== lotRowId));
+  };
+
+  // ดึงรายการยาที่อยู่ในตะกร้ากลับมาแสดงในฟอร์มด้านบน เพื่อแก้ไขจำนวน (หรือค่าอื่น) แล้วกด
+  // "เพิ่มลงตะกร้า" ใหม่อีกครั้ง — ระหว่างที่แก้ไข รายการนี้จะถูกดึงออกจากตะกร้าไปก่อนชั่วคราว
+  // กันไม่ให้ค้างซ้ำ 2 รายการถ้าผู้ใช้ยังไม่กดเพิ่มกลับ (เผื่อสลับยาอื่นแทน ก็แค่หายไปจากตะกร้าเฉยๆ ไม่ได้เสียข้อมูลจริง เพราะยังไม่บันทึกลง DB)
+  const editCartItem = (item) => {
+    setFormData((prev) => ({
+      ...prev,
+      searchDrug: item.drugName,
+      drugId: item.drugId,
+      lotRowId: item.lotRowId,
+      strength: item.strength,
+      drugType: item.drugType,
+      unit: item.unit,
+      lotNumber: item.lotNumber,
+      mfgDate: item.mfgDate,
+      expDate: item.expDate,
+      mfgDateRaw: item.mfgDateRaw,
+      expDateRaw: item.expDateRaw,
+      quantity: String(item.quantity),
+      maxQuantity: item.maxQuantity,
+      unitPrice: item.unitPrice,
+    }));
+    removeFromCart(item.lotRowId);
   };
 
   // URL ของ Google Apps Script (Web App) เดิมที่มีบอทไลน์ + Token/Group ID ตั้งค่าไว้อยู่แล้ว
@@ -1294,6 +1318,14 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
                     Lot: {item.lotNumber || "-"} | จ่าย: <span className="font-bold text-[#007bff]">{item.quantity}</span> {item.unit || ""}
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => editCartItem(item)}
+                  className="shrink-0 rounded-lg p-1.5 text-amber-500 hover:bg-amber-50 active:scale-95 transition-all"
+                  title="แก้ไขจำนวน/รายการนี้"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
                 <button
                   type="button"
                   onClick={() => removeFromCart(item.lotRowId)}
