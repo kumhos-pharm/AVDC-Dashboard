@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import {
   FileText,
@@ -9,8 +9,11 @@ import {
   Clock,
   SlidersHorizontal,
   Loader2,
+  Wallet,
+  CalendarRange,
 } from "lucide-react";
 import { useAvdcData } from "./useAvdcData";
+import { supabase } from "./supabaseClient";
 import avdcLogo from "./assets/avdc-logo.png";
 
 const NAVY = "#0d2a63";
@@ -53,17 +56,123 @@ function nowThaiDateTime() {
   return `${d.getDate()} ${months[d.getMonth()]} ${buddhistYear} เวลา ${time} น.`;
 }
 
+// คำนวณช่วงวันที่ (from/to) จากปุ่มลัดที่เลือก — ใช้ร่วมกับรายงานที่อิง stock_movements (มีวันที่จริง)
+// "custom" คืนค่า null ถ้ายังกรอกวันที่ไม่ครบ เพื่อไม่ให้ query ยิงออกไปแบบเดาช่วงเอง
+function getDateRange(preset, customFrom, customTo) {
+  const now = new Date();
+  let from, to;
+  if (preset === "month") {
+    from = new Date(now.getFullYear(), now.getMonth(), 1);
+    to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  } else if (preset === "quarter") {
+    const q = Math.floor(now.getMonth() / 3);
+    from = new Date(now.getFullYear(), q * 3, 1);
+    to = new Date(now.getFullYear(), q * 3 + 3, 0, 23, 59, 59, 999);
+  } else if (preset === "year") {
+    from = new Date(now.getFullYear(), 0, 1);
+    to = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+  } else {
+    from = customFrom ? new Date(`${customFrom}T00:00:00`) : null;
+    to = customTo ? new Date(`${customTo}T23:59:59.999`) : null;
+  }
+  return { from, to };
+}
+
 const REPORT_TYPES = [
   { key: "stock", label: "คงคลังตามหน่วยงาน", desc: "ยอดคงเหลือของยาแต่ละตัว แยกตามหน่วยงาน", icon: Building2 },
   { key: "watch", label: "ยาที่ต้องติดตาม (Min/Max)", desc: "รายการต่ำกว่า Min / ใกล้ต่ำกว่า Min / เกิน Max", icon: AlertTriangle },
   { key: "expiring", label: "ยาใกล้หมดอายุ", desc: "ยาที่เหลืออายุไม่เกิน 90 วัน", icon: Clock },
+  { key: "dispense_by_dept", label: "มูลค่าจ่ายยาแยกหน่วยงาน", desc: "สรุปจำนวนและมูลค่ายาที่จ่ายไป แยกตามหน่วยงาน ตามช่วงวันที่", icon: Wallet },
 ];
+
+// รายงานกลุ่มนี้ดึงจาก stock_movements (มีวันที่จ่ายจริง) ต่างจาก 3 รายงานแรกที่ดึงจากยอดคงคลังปัจจุบัน
+const DATE_FILTERED_REPORTS = ["dispense_by_dept"];
 
 export default function ReportsPage() {
   const { loading, departments, drugRows, expiringLots, lotsByDrugDept } = useAvdcData();
   const [reportType, setReportType] = useState("stock");
   const [filterDept, setFilterDept] = useState("all");
   const [preparedBy, setPreparedBy] = useState("");
+
+  // ---------- ตัวกรองช่วงวันที่ (ใช้เฉพาะรายงานที่อิง stock_movements) ----------
+  const [datePreset, setDatePreset] = useState("month"); // month | quarter | year | custom
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const isDateFilteredReport = DATE_FILTERED_REPORTS.includes(reportType);
+  const { from: dateFrom, to: dateTo } = useMemo(
+    () => getDateRange(datePreset, customFrom, customTo),
+    [datePreset, customFrom, customTo]
+  );
+
+  // ---------- ดึงข้อมูลการจ่ายยาดิบจาก stock_movements ตามช่วงวันที่ที่เลือก ----------
+  const [dispenseRaw, setDispenseRaw] = useState([]);
+  const [dispenseLoading, setDispenseLoading] = useState(false);
+  const [dispenseError, setDispenseError] = useState(null);
+
+  useEffect(() => {
+    if (!isDateFilteredReport) return;
+    // โหมด "กำหนดเอง" แต่ยังกรอกวันที่ไม่ครบ — รอผู้ใช้กรอกให้ครบก่อน ไม่ยิง query แบบเดาช่วง
+    if (!dateFrom || !dateTo) {
+      setDispenseRaw([]);
+      return;
+    }
+
+    let cancelled = false;
+    setDispenseLoading(true);
+    setDispenseError(null);
+
+    supabase
+      .from("stock_movements")
+      .select("id, change_qty, unit_price, created_at, department_id, drug_id, departments(name), drugs(name, strength, form)")
+      .eq("reason", "dispense")
+      .gte("created_at", dateFrom.toISOString())
+      .lte("created_at", dateTo.toISOString())
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          setDispenseError(error);
+          setDispenseRaw([]);
+        } else {
+          setDispenseRaw(data || []);
+        }
+        setDispenseLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isDateFilteredReport, dateFrom, dateTo]);
+
+  // ---------- รายงาน 4: มูลค่าจ่ายยาแยกหน่วยงาน ----------
+  const dispenseByDeptRows = useMemo(() => {
+    if (reportType !== "dispense_by_dept") return [];
+    const map = {};
+    dispenseRaw.forEach((r) => {
+      const deptName = r.departments?.name || "ไม่ระบุหน่วยงาน";
+      if (filterDept !== "all" && deptName !== filterDept) return;
+      if (!map[deptName]) {
+        map[deptName] = { deptName, txCount: 0, totalQty: 0, totalValue: 0, missingPriceCount: 0 };
+      }
+      const qty = Math.abs(r.change_qty || 0);
+      map[deptName].txCount += 1;
+      map[deptName].totalQty += qty;
+      if (r.unit_price != null) {
+        map[deptName].totalValue += qty * r.unit_price;
+      } else {
+        map[deptName].missingPriceCount += 1;
+      }
+    });
+    const rows = Object.values(map).sort((a, b) => b.totalValue - a.totalValue);
+    const grandValue = rows.reduce((sum, r) => sum + r.totalValue, 0);
+    return rows.map((r) => ({
+      deptName: r.deptName,
+      txCount: r.txCount,
+      totalQty: r.totalQty,
+      totalValue: r.totalValue.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      percentOfTotal: grandValue > 0 ? `${((r.totalValue / grandValue) * 100).toFixed(1)}%` : "-",
+      missingPriceCount: r.missingPriceCount > 0 ? r.missingPriceCount : "-",
+    }));
+  }, [dispenseRaw, reportType, filterDept]);
 
   // ---------- รายงาน 1: คงคลังตามหน่วยงาน ----------
   const stockRows = useMemo(() => {
@@ -144,7 +253,11 @@ export default function ReportsPage() {
   }, [expiringLots, filterDept]);
 
   const activeConfig = REPORT_TYPES.find((r) => r.key === reportType);
-  const activeRows = reportType === "stock" ? stockRows : reportType === "watch" ? watchRows : expiringRows;
+  const activeRows =
+    reportType === "stock" ? stockRows :
+    reportType === "watch" ? watchRows :
+    reportType === "dispense_by_dept" ? dispenseByDeptRows :
+    expiringRows;
 
   const columns =
     reportType === "stock"
@@ -173,6 +286,15 @@ export default function ReportsPage() {
           { key: "max", label: "Max", align: "right", width: "6%" },
           { key: "status", label: "สถานะ", width: "13%" },
         ]
+      : reportType === "dispense_by_dept"
+      ? [
+          { key: "deptName", label: "หน่วยงาน", width: "22%" },
+          { key: "txCount", label: "จำนวนรายการ", align: "right", width: "14%" },
+          { key: "totalQty", label: "จำนวนหน่วยรวม", align: "right", width: "16%" },
+          { key: "totalValue", label: "มูลค่ารวม (บาท)", align: "right", width: "20%" },
+          { key: "percentOfTotal", label: "% ของยอดรวม", align: "right", width: "14%" },
+          { key: "missingPriceCount", label: "รายการไม่มีราคา", align: "right", width: "14%" },
+        ]
       : [
           { key: "drugName", label: "ชื่อยา", width: "24%" },
           { key: "strength", label: "ความแรง", width: "10%" },
@@ -196,6 +318,8 @@ export default function ReportsPage() {
     const filename = `AVDC-${reportType}-${new Date().toISOString().slice(0, 10)}.xlsx`;
     XLSX.writeFile(wb, filename);
   }
+
+  const isBusy = loading || (isDateFilteredReport && dispenseLoading);
 
   function handlePrint() {
     window.print();
@@ -241,6 +365,68 @@ export default function ReportsPage() {
             })}
           </div>
 
+          {/* ตัวกรองช่วงวันที่ (เฉพาะรายงานที่อิงจากประวัติการจ่ายยา) */}
+          {isDateFilteredReport && (
+            <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:flex-wrap sm:items-end">
+              <div className="flex-1 min-w-[220px]">
+                <label className="mb-1 flex items-center gap-1 text-xs font-bold text-slate-500">
+                  <CalendarRange className="h-3.5 w-3.5" /> ช่วงวันที่
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { key: "month", label: "เดือนนี้" },
+                    { key: "quarter", label: "ไตรมาสนี้" },
+                    { key: "year", label: "ปีนี้" },
+                    { key: "custom", label: "กำหนดเอง" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => setDatePreset(opt.key)}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                        datePreset === opt.key
+                          ? "bg-[#007bff] text-white"
+                          : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {datePreset === "custom" && (
+                <>
+                  <div className="min-w-[150px]">
+                    <label className="mb-1 block text-xs font-bold text-slate-500">ตั้งแต่วันที่</label>
+                    <input
+                      type="date"
+                      value={customFrom}
+                      onChange={(e) => setCustomFrom(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:bg-white"
+                    />
+                  </div>
+                  <div className="min-w-[150px]">
+                    <label className="mb-1 block text-xs font-bold text-slate-500">ถึงวันที่</label>
+                    <input
+                      type="date"
+                      value={customTo}
+                      onChange={(e) => setCustomTo(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:bg-white"
+                    />
+                  </div>
+                </>
+              )}
+              {dateFrom && dateTo && (
+                <p className="text-xs text-slate-400">
+                  แสดงข้อมูล {thaiDateShort(dateFrom)} – {thaiDateShort(dateTo)}
+                </p>
+              )}
+              {datePreset === "custom" && (!customFrom || !customTo) && (
+                <p className="text-xs font-bold text-amber-500">กรุณาเลือกวันที่เริ่มต้นและสิ้นสุดให้ครบ</p>
+              )}
+            </div>
+          )}
+
           {/* ตัวกรอง + ผู้จัดทำ + ปุ่ม export */}
           <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:flex-wrap sm:items-end">
             <div className="flex-1 min-w-[160px]">
@@ -270,14 +456,14 @@ export default function ReportsPage() {
             <div className="flex gap-2">
               <button
                 onClick={exportExcel}
-                disabled={loading || activeRows.length === 0}
+                disabled={isBusy || activeRows.length === 0}
                 className="flex items-center gap-1.5 rounded-xl bg-[#16a34a] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#128a3e] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Download className="h-4 w-4" /> ดาวน์โหลด Excel
               </button>
               <button
                 onClick={handlePrint}
-                disabled={loading || activeRows.length === 0}
+                disabled={isBusy || activeRows.length === 0}
                 className="flex items-center gap-1.5 rounded-xl bg-[#007bff] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#0062cc] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Printer className="h-4 w-4" /> พิมพ์ / บันทึกเป็น PDF
@@ -285,10 +471,13 @@ export default function ReportsPage() {
             </div>
           </div>
 
-          {loading && (
+          {isBusy && (
             <p className="flex items-center gap-2 text-sm text-slate-400">
               <Loader2 className="h-4 w-4 animate-spin" /> กำลังโหลดข้อมูล...
             </p>
+          )}
+          {dispenseError && (
+            <p className="text-sm font-bold text-red-500">เกิดข้อผิดพลาดในการดึงข้อมูล: {dispenseError.message}</p>
           )}
         </div>
 
@@ -303,6 +492,9 @@ export default function ReportsPage() {
               </p>
               <p className="text-sm font-bold text-slate-600">{activeConfig.label}</p>
               {filterDept !== "all" && <p className="text-xs text-slate-400">เฉพาะหน่วยงาน: {filterDept}</p>}
+              {isDateFilteredReport && dateFrom && dateTo && (
+                <p className="text-xs text-slate-400">ช่วงวันที่: {thaiDateShort(dateFrom)} – {thaiDateShort(dateTo)}</p>
+              )}
             </div>
             <div className="ml-auto text-right text-xs text-slate-400">
               <p>พิมพ์เมื่อ {nowThaiDateTime()}</p>
