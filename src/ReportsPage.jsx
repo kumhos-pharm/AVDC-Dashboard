@@ -11,6 +11,7 @@ import {
   Loader2,
   Wallet,
   CalendarRange,
+  Layers,
 } from "lucide-react";
 import { useAvdcData } from "./useAvdcData";
 import { supabase } from "./supabaseClient";
@@ -83,10 +84,11 @@ const REPORT_TYPES = [
   { key: "watch", label: "ยาที่ต้องติดตาม (Min/Max)", desc: "รายการต่ำกว่า Min / ใกล้ต่ำกว่า Min / เกิน Max", icon: AlertTriangle },
   { key: "expiring", label: "ยาใกล้หมดอายุ", desc: "ยาที่เหลืออายุไม่เกิน 90 วัน", icon: Clock },
   { key: "dispense_by_dept", label: "มูลค่าจ่ายยาแยกหน่วยงาน", desc: "สรุปจำนวนและมูลค่ายาที่จ่ายไป แยกตามหน่วยงาน ตามช่วงวันที่", icon: Wallet },
+  { key: "dispense_by_dept_detail", label: "จ่ายยารายหน่วยงาน (รายการ)", desc: "แต่ละหน่วยงานจ่ายยาอะไรไปบ้าง พร้อมจำนวนและมูลค่าต่อรายการ", icon: Layers },
 ];
 
 // รายงานกลุ่มนี้ดึงจาก stock_movements (มีวันที่จ่ายจริง) ต่างจาก 3 รายงานแรกที่ดึงจากยอดคงคลังปัจจุบัน
-const DATE_FILTERED_REPORTS = ["dispense_by_dept"];
+const DATE_FILTERED_REPORTS = ["dispense_by_dept", "dispense_by_dept_detail"];
 
 export default function ReportsPage() {
   const { loading, departments, drugRows, expiringLots, lotsByDrugDept } = useAvdcData();
@@ -174,6 +176,52 @@ export default function ReportsPage() {
     }));
   }, [dispenseRaw, reportType, filterDept]);
 
+  // ---------- รายงาน 5: จ่ายยารายหน่วยงาน (รายการ) — กลุ่มตามหน่วยงาน แต่ละกลุ่มมีรายการยาที่จ่าย ----------
+  const dispenseDetailGroups = useMemo(() => {
+    if (reportType !== "dispense_by_dept_detail") return [];
+    const groups = {};
+    dispenseRaw.forEach((r) => {
+      const deptName = r.departments?.name || "ไม่ระบุหน่วยงาน";
+      if (filterDept !== "all" && deptName !== filterDept) return;
+      if (!groups[deptName]) {
+        groups[deptName] = { deptName, items: [], subtotalQty: 0, subtotalValue: 0, missingPriceCount: 0 };
+      }
+      const qty = Math.abs(r.change_qty || 0);
+      const lineValue = r.unit_price != null ? qty * r.unit_price : null;
+      groups[deptName].items.push({
+        drugName: r.drugs?.name || "-",
+        strength: r.drugs?.strength || "-",
+        form: r.drugs?.form || "-",
+        date: thaiDateShort(r.created_at),
+        qty,
+        unitPrice: r.unit_price != null ? r.unit_price.toLocaleString("th-TH", { minimumFractionDigits: 2 }) : "-",
+        lineValue: lineValue != null ? lineValue.toLocaleString("th-TH", { minimumFractionDigits: 2 }) : "-",
+        _sortDate: r.created_at,
+      });
+      groups[deptName].subtotalQty += qty;
+      if (lineValue != null) groups[deptName].subtotalValue += lineValue;
+      else groups[deptName].missingPriceCount += 1;
+    });
+    return Object.values(groups)
+      .map((g) => ({
+        ...g,
+        items: g.items.sort((a, b) => new Date(b._sortDate) - new Date(a._sortDate)),
+        subtotalValueText: g.subtotalValue.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      }))
+      .sort((a, b) => b.subtotalValue - a.subtotalValue);
+  }, [dispenseRaw, reportType, filterDept]);
+
+  // คอลัมน์รายการยา ใช้แสดงในตารางย่อยของแต่ละหน่วยงาน (รายงาน "จ่ายยารายหน่วยงาน (รายการ)")
+  const detailItemColumns = [
+    { key: "drugName", label: "ชื่อยา", width: "26%" },
+    { key: "strength", label: "ความแรง", width: "10%" },
+    { key: "form", label: "รูปแบบยา", width: "10%" },
+    { key: "date", label: "วันที่จ่าย", width: "15%" },
+    { key: "qty", label: "จำนวน", align: "right", width: "9%" },
+    { key: "unitPrice", label: "ราคา/หน่วย (บาท)", align: "right", width: "15%" },
+    { key: "lineValue", label: "มูลค่า (บาท)", align: "right", width: "15%" },
+  ];
+
   // ---------- รายงาน 1: คงคลังตามหน่วยงาน ----------
   const stockRows = useMemo(() => {
     const rows = [];
@@ -257,6 +305,7 @@ export default function ReportsPage() {
     reportType === "stock" ? stockRows :
     reportType === "watch" ? watchRows :
     reportType === "dispense_by_dept" ? dispenseByDeptRows :
+    reportType === "dispense_by_dept_detail" ? dispenseDetailGroups.flatMap((g) => g.items.map((it) => ({ deptName: g.deptName, ...it }))) :
     expiringRows;
 
   const columns =
@@ -307,6 +356,24 @@ export default function ReportsPage() {
         ];
 
   function exportExcel() {
+    if (reportType === "dispense_by_dept_detail") {
+      const wsData = [["หน่วยงาน", ...detailItemColumns.map((c) => c.label)]];
+      dispenseDetailGroups.forEach((g) => {
+        wsData.push([`${g.deptName} (${g.items.length} รายการ)`]);
+        g.items.forEach((it) => {
+          wsData.push(["", ...detailItemColumns.map((c) => it[c.key])]);
+        });
+        wsData.push(["", "", "", "", "รวมหน่วยงานนี้", g.subtotalQty, "", g.subtotalValueText]);
+        wsData.push([]);
+      });
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      ws["!cols"] = [{ wch: 18 }, ...detailItemColumns.map(() => ({ wch: 18 }))];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, activeConfig.label.slice(0, 31));
+      const filename = `AVDC-${reportType}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      XLSX.writeFile(wb, filename);
+      return;
+    }
     const wsData = [
       columns.map((c) => c.label),
       ...activeRows.map((r) => columns.map((c) => r[c.key])),
@@ -504,47 +571,111 @@ export default function ReportsPage() {
           </div>
 
           {/* ตารางรายงาน */}
-          <table className="w-full border-collapse text-sm print:text-[9.5px]" style={{ tableLayout: "fixed" }}>
-            <colgroup>
-              {columns.map((c) => (
-                <col key={c.key} style={{ width: c.width }} />
-              ))}
-            </colgroup>
-            <thead className="print:table-header-group">
-              <tr>
-                {columns.map((c) => (
-                  <th
-                    key={c.key}
-                    className={`border border-slate-200 bg-slate-50 px-2.5 py-2 font-bold text-slate-600 print:bg-slate-100 print:px-1.5 print:py-1 break-words ${c.align === "right" ? "text-right" : "text-left"}`}
-                  >
-                    {c.label}
-                  </th>
+          {reportType === "dispense_by_dept_detail" ? (
+            dispenseDetailGroups.length === 0 ? (
+              <p className="border border-slate-200 px-2.5 py-6 text-center text-slate-400 rounded-xl">
+                ไม่มีข้อมูลสำหรับรายงานนี้
+              </p>
+            ) : (
+              <div className="space-y-6">
+                {dispenseDetailGroups.map((g) => (
+                  <div key={g.deptName} className="break-inside-avoid print:break-inside-avoid">
+                    {/* หัวข้อหน่วยงาน */}
+                    <div className="mb-1.5 flex items-center justify-between rounded-lg px-3 py-1.5" style={{ backgroundColor: `${NAVY}14` }}>
+                      <p className="text-sm font-black" style={{ color: NAVY }}>{g.deptName}</p>
+                      <p className="text-xs font-bold text-slate-500">
+                        {g.items.length} รายการ · {g.subtotalQty.toLocaleString("th-TH")} หน่วย
+                        {g.missingPriceCount > 0 && (
+                          <span className="ml-2 text-amber-500">({g.missingPriceCount} รายการไม่มีราคา)</span>
+                        )}
+                      </p>
+                    </div>
+                    <table className="w-full border-collapse text-sm print:text-[9.5px]" style={{ tableLayout: "fixed" }}>
+                      <colgroup>
+                        {detailItemColumns.map((c) => (
+                          <col key={c.key} style={{ width: c.width }} />
+                        ))}
+                      </colgroup>
+                      <thead className="print:table-header-group">
+                        <tr>
+                          {detailItemColumns.map((c) => (
+                            <th
+                              key={c.key}
+                              className={`border border-slate-200 bg-slate-50 px-2.5 py-2 font-bold text-slate-600 print:bg-slate-100 print:px-1.5 print:py-1 break-words ${c.align === "right" ? "text-right" : "text-left"}`}
+                            >
+                              {c.label}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {g.items.map((it, idx) => (
+                          <tr key={idx} className="break-inside-avoid print:break-inside-avoid">
+                            {detailItemColumns.map((c) => (
+                              <td
+                                key={c.key}
+                                className={`border border-slate-200 px-2.5 py-1.5 print:px-1.5 print:py-1 break-words leading-snug ${c.align === "right" ? "text-right font-semibold" : ""}`}
+                              >
+                                {it[c.key]}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                        <tr className="bg-slate-50 font-bold">
+                          <td colSpan={4} className="border border-slate-200 px-2.5 py-1.5 text-right">รวมหน่วยงานนี้</td>
+                          <td className="border border-slate-200 px-2.5 py-1.5 text-right">{g.subtotalQty.toLocaleString("th-TH")}</td>
+                          <td className="border border-slate-200 px-2.5 py-1.5"></td>
+                          <td className="border border-slate-200 px-2.5 py-1.5 text-right">{g.subtotalValueText}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
-              {activeRows.length === 0 ? (
+              </div>
+            )
+          ) : (
+            <table className="w-full border-collapse text-sm print:text-[9.5px]" style={{ tableLayout: "fixed" }}>
+              <colgroup>
+                {columns.map((c) => (
+                  <col key={c.key} style={{ width: c.width }} />
+                ))}
+              </colgroup>
+              <thead className="print:table-header-group">
                 <tr>
-                  <td colSpan={columns.length} className="border border-slate-200 px-2.5 py-6 text-center text-slate-400">
-                    ไม่มีข้อมูลสำหรับรายงานนี้
-                  </td>
+                  {columns.map((c) => (
+                    <th
+                      key={c.key}
+                      className={`border border-slate-200 bg-slate-50 px-2.5 py-2 font-bold text-slate-600 print:bg-slate-100 print:px-1.5 print:py-1 break-words ${c.align === "right" ? "text-right" : "text-left"}`}
+                    >
+                      {c.label}
+                    </th>
+                  ))}
                 </tr>
-              ) : (
-                activeRows.map((r, idx) => (
-                  <tr key={idx} className="break-inside-avoid print:break-inside-avoid">
-                    {columns.map((c) => (
-                      <td
-                        key={c.key}
-                        className={`border border-slate-200 px-2.5 py-1.5 print:px-1.5 print:py-1 break-words leading-snug ${c.align === "right" ? "text-right font-semibold" : ""}`}
-                      >
-                        {r[c.key]}
-                      </td>
-                    ))}
+              </thead>
+              <tbody>
+                {activeRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={columns.length} className="border border-slate-200 px-2.5 py-6 text-center text-slate-400">
+                      ไม่มีข้อมูลสำหรับรายงานนี้
+                    </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  activeRows.map((r, idx) => (
+                    <tr key={idx} className="break-inside-avoid print:break-inside-avoid">
+                      {columns.map((c) => (
+                        <td
+                          key={c.key}
+                          className={`border border-slate-200 px-2.5 py-1.5 print:px-1.5 print:py-1 break-words leading-snug ${c.align === "right" ? "text-right font-semibold" : ""}`}
+                        >
+                          {r[c.key]}
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          )}
 
           <p className="mt-4 text-center text-[11px] text-slate-300 print:block">
             ออกโดยระบบ AVDC Dashboard — ศูนย์ Antidote และ Vital Drug โรงพยาบาลกุมภวาปี
