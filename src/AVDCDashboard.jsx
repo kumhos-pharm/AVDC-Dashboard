@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Search,
@@ -207,6 +207,13 @@ export default function AVDCDashboard() {
   const [activeModal, setActiveModal] = useState(null); // "drugs" | "depts" | "qty" | "expiring" | "watch" | null
   const [watchStatus, setWatchStatus] = useState(null); // "low" | "near" | "over" — ใช้ตอนเปิด popup รายการที่ต้องติดตาม
   const [cellDetail, setCellDetail] = useState(null); // { drugName, deptName, deptId, cell } — ใช้ตอนคลิกยอดคงเหลือในตารางหลัก (แสดง popup แทนการเปลี่ยนหน้าไปคลังยา)
+
+  // นาฬิกาปัจจุบัน (อัปเดตทุกนาที)
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   // ไปหน้าคลังยา พร้อมค้นหาชื่อยา/หน่วยงานที่ต้องการให้ทันที (ใช้ตอนคลิกยอดที่ต่ำกว่า Min ในตาราง)
   function goToWarehouse({ drugName, departmentId } = {}) {
@@ -421,7 +428,7 @@ export default function AVDCDashboard() {
                 <div className="leading-tight">
                   <div className="font-bold text-slate-400 text-[10.5px] mb-0.5">อัปเดตล่าสุด</div>
                   <div className="font-extrabold text-slate-700 text-xs md:text-sm whitespace-pre-line">
-                    {formatThaiDateTime(lastUpdated)}
+                    {formatThaiDateTime(now.toISOString())}
                   </div>
                 </div>
                 <button
