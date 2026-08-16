@@ -586,9 +586,15 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
       "------------------------------",
       `รายการยา (${items.length} รายการ):`,
     ];
-    items.forEach((item) => {
+    items.forEach((item, index) => {
+      if (items.length > 1) lines.push(`--- รายการที่ ${index + 1} ---`);
       lines.push(
-        `🔹 ${item.drugName || "-"}${item.strength ? ` (${item.strength})` : ""} | จ่าย: ${item.quantity} ${item.unit || ""} | Lot: ${item.lotNumber || "-"}`
+        `🔹 ${item.drugName || "-"}${item.strength ? ` (${item.strength})` : ""}`,
+        `📦 รูปแบบ: ${item.drugType || "-"}`,
+        `🔢 จำนวนจ่าย: ${item.quantity} ${item.unit || ""}`,
+        `📦 คงเหลือในคลัง: ${item.remainingStock ?? "-"} ${item.unit || ""}`,
+        `🏷️ Lot: ${item.lotNumber || "-"}`,
+        `📅 EXP: ${item.expDate || "-"}`
       );
     });
     lines.push(
@@ -953,6 +959,19 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
       // 2. หักยอดสต็อกของทุกล็อตทำโดย trigger `trg_apply_stock_movement` อัตโนมัติ (ทำงานตอน insert ข้างบน)
       // ไม่ต้อง .update() drug_lots เองอีก มิเช่นนั้นจะหักซ้ำ 2 เด้ง
 
+      // 3. ดึงยอดคงเหลือหลัง trigger หักสต็อกแล้ว
+      const lotIds = itemsToSubmit.map((item) => item.lotRowId);
+      const { data: updatedLots } = await supabase
+        .from("drug_lots")
+        .select("id, quantity")
+        .in("id", lotIds);
+      const remainingMap = {};
+      (updatedLots || []).forEach((lot) => { remainingMap[lot.id] = lot.quantity; });
+      const itemsWithRemaining = itemsToSubmit.map((item) => ({
+        ...item,
+        remainingStock: remainingMap[item.lotRowId] ?? "-",
+      }));
+
       Swal.fire({
         ...swalBase,
         icon: "success",
@@ -961,7 +980,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
         timer: 1500,
         showConfirmButton: false,
       });
-      notifyLine(buildMultiDispenseMessage(itemsToSubmit));
+      notifyLine(buildMultiDispenseMessage(itemsWithRemaining));
 
       resetForm();
       fetchDrugs(departmentId);
