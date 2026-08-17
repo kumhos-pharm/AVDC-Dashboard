@@ -14,6 +14,7 @@ import {
   Layers,
   Pill,
   ListOrdered,
+  ArrowLeftRight,
 } from "lucide-react";
 import { useAvdcData } from "./useAvdcData";
 import { supabase } from "./supabaseClient";
@@ -89,10 +90,11 @@ const REPORT_TYPES = [
   { key: "dispense_by_dept_detail", label: "จ่ายยารายหน่วยงาน (รายการ)", desc: "แต่ละหน่วยงานจ่ายยาอะไรไปบ้าง พร้อมจำนวนและมูลค่าต่อรายการ", icon: Layers },
   { key: "dispense_by_drug", label: "จ่ายยาตามรายชื่อยา", desc: "ยาตัวไหนถูกจ่ายไปมาก/มูลค่าสูงสุด มองภาพรวมทุกหน่วยงาน", icon: Pill },
   { key: "dispense_detail", label: "รายละเอียดรายธุรกรรม", desc: "ประวัติการจ่ายยาทุกรายการ เรียงตามวันที่ ไว้ตรวจสอบย้อนหลัง", icon: ListOrdered },
+  { key: "replenish_report", label: "การเติมยาให้หน่วยงาน", desc: "คลังยา / ศูนย์ AVDC เติมยาให้หน่วยงานไหนบ้าง ตามช่วงวันที่", icon: ArrowLeftRight },
 ];
 
 // รายงานกลุ่มนี้ดึงจาก stock_movements (มีวันที่จ่ายจริง) ต่างจาก 3 รายงานแรกที่ดึงจากยอดคงคลังปัจจุบัน
-const DATE_FILTERED_REPORTS = ["dispense_by_dept", "dispense_by_dept_detail", "dispense_by_drug", "dispense_detail"];
+const DATE_FILTERED_REPORTS = ["dispense_by_dept", "dispense_by_dept_detail", "dispense_by_drug", "dispense_detail", "replenish_report"];
 
 export default function ReportsPage() {
   const { loading, departments, drugRows, expiringLots, lotsByDrugDept } = useAvdcData();
@@ -110,13 +112,18 @@ export default function ReportsPage() {
     [datePreset, customFrom, customTo]
   );
 
+  // รายงานที่อิงข้อมูล "จ่ายยา" (reason='dispense') — แยกจากรายงาน "เติมยา" ที่ใช้ reason อื่น
+  const DISPENSE_REPORTS = ["dispense_by_dept", "dispense_by_dept_detail", "dispense_by_drug", "dispense_detail"];
+  const isDispenseReport = DISPENSE_REPORTS.includes(reportType);
+  const isReplenishReport = reportType === "replenish_report";
+
   // ---------- ดึงข้อมูลการจ่ายยาดิบจาก stock_movements ตามช่วงวันที่ที่เลือก ----------
   const [dispenseRaw, setDispenseRaw] = useState([]);
   const [dispenseLoading, setDispenseLoading] = useState(false);
   const [dispenseError, setDispenseError] = useState(null);
 
   useEffect(() => {
-    if (!isDateFilteredReport) return;
+    if (!isDispenseReport) return;
     // โหมด "กำหนดเอง" แต่ยังกรอกวันที่ไม่ครบ — รอผู้ใช้กรอกให้ครบก่อน ไม่ยิง query แบบเดาช่วง
     if (!dateFrom || !dateTo) {
       setDispenseRaw([]);
@@ -149,7 +156,117 @@ export default function ReportsPage() {
     return () => {
       cancelled = true;
     };
-  }, [isDateFilteredReport, dateFrom, dateTo]);
+  }, [isDispenseReport, dateFrom, dateTo]);
+
+  // ---------- ดึงข้อมูล "เติมยา/โอนยา" ดิบจาก stock_movements (รองรับทั้งชื่อ reason เก่า transfer_* และใหม่ replenish_*) ----------
+  const [replenishRaw, setReplenishRaw] = useState([]);
+  const [replenishLoading, setReplenishLoading] = useState(false);
+  const [replenishError, setReplenishError] = useState(null);
+
+  useEffect(() => {
+    if (!isReplenishReport) return;
+    if (!dateFrom || !dateTo) {
+      setReplenishRaw([]);
+      return;
+    }
+
+    let cancelled = false;
+    setReplenishLoading(true);
+    setReplenishError(null);
+
+    supabase
+      .from("stock_movements")
+      .select(
+        "id, transfer_group_id, reason, change_qty, unit_price, created_at, department_id, drug_id, lot, staff_name, departments(name), drugs(name, strength, form)"
+      )
+      .in("reason", ["replenish_out", "replenish_in", "transfer_out", "transfer_in"])
+      .gte("created_at", dateFrom.toISOString())
+      .lte("created_at", dateTo.toISOString())
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          setReplenishError(error);
+          setReplenishRaw([]);
+        } else {
+          setReplenishRaw(data || []);
+        }
+        setReplenishLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isReplenishReport, dateFrom, dateTo]);
+
+  // จับคู่แถว "ออกจากต้นทาง" กับ "เข้าปลายทาง" ด้วย transfer_group_id ให้เหลือ 1 รายการต่อการเติมยา 1 ครั้ง
+  const replenishPairs = useMemo(() => {
+    if (reportType !== "replenish_report") return [];
+    const byGroup = {};
+    replenishRaw.forEach((r) => {
+      if (!r.transfer_group_id) return;
+      if (!byGroup[r.transfer_group_id]) byGroup[r.transfer_group_id] = {};
+      if (r.reason.endsWith("_out")) byGroup[r.transfer_group_id].out = r;
+      else byGroup[r.transfer_group_id].in = r;
+    });
+    const SOURCE_DEPTS = ["คลังยา", "ศูนย์ AVDC (Phar-OPD)"];
+    return Object.values(byGroup)
+      .filter((pair) => pair.out && pair.in)
+      .filter((pair) => SOURCE_DEPTS.includes(pair.out.departments?.name))
+      .map((pair) => {
+        const qty = Math.abs(pair.out.change_qty || 0);
+        const lineValue = pair.out.unit_price != null ? qty * pair.out.unit_price : null;
+        return {
+          sourceDept: pair.out.departments?.name || "-",
+          destDept: pair.in.departments?.name || "-",
+          drugName: pair.out.drugs?.name || "-",
+          strength: pair.out.drugs?.strength || "-",
+          form: pair.out.drugs?.form || "-",
+          lot: pair.out.lot || "-",
+          date: thaiDateShort(pair.out.created_at),
+          qty,
+          unitPrice: pair.out.unit_price != null ? pair.out.unit_price.toLocaleString("th-TH", { minimumFractionDigits: 2 }) : "-",
+          lineValue: lineValue != null ? lineValue.toLocaleString("th-TH", { minimumFractionDigits: 2 }) : "-",
+          staffName: pair.out.staff_name || "-",
+          _lineValueRaw: lineValue,
+          _sortDate: pair.out.created_at,
+        };
+      });
+  }, [replenishRaw, reportType]);
+
+  // จัดกลุ่มตามหน่วยงานปลายทาง — ตอบคำถาม "เติมให้ใครบ้าง"
+  const replenishByDeptGroups = useMemo(() => {
+    if (reportType !== "replenish_report") return [];
+    const groups = {};
+    replenishPairs.forEach((r) => {
+      if (filterDept !== "all" && r.destDept !== filterDept) return;
+      if (!groups[r.destDept]) {
+        groups[r.destDept] = { deptName: r.destDept, items: [], subtotalQty: 0, subtotalValue: 0, missingPriceCount: 0 };
+      }
+      groups[r.destDept].items.push(r);
+      groups[r.destDept].subtotalQty += r.qty;
+      if (r._lineValueRaw != null) groups[r.destDept].subtotalValue += r._lineValueRaw;
+      else groups[r.destDept].missingPriceCount += 1;
+    });
+    return Object.values(groups)
+      .map((g) => ({
+        ...g,
+        items: g.items.sort((a, b) => new Date(b._sortDate) - new Date(a._sortDate)),
+        subtotalValueText: g.subtotalValue.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      }))
+      .sort((a, b) => b.subtotalValue - a.subtotalValue);
+  }, [replenishPairs, reportType, filterDept]);
+
+  // คอลัมน์รายการยา ใช้แสดงในตารางย่อยของแต่ละหน่วยงานปลายทาง (รายงาน "เติมยาให้หน่วยงาน")
+  const replenishItemColumns = [
+    { key: "sourceDept", label: "เติมจาก", width: "16%" },
+    { key: "drugName", label: "ชื่อยา", width: "22%" },
+    { key: "strength", label: "ความแรง", width: "9%" },
+    { key: "lot", label: "Lot", width: "12%" },
+    { key: "date", label: "วันที่เติม", width: "12%" },
+    { key: "qty", label: "จำนวน", align: "right", width: "8%" },
+    { key: "unitPrice", label: "ราคา/หน่วย", align: "right", width: "11%" },
+    { key: "lineValue", label: "มูลค่า (บาท)", align: "right", width: "10%" },
+  ];
 
   // ---------- รายงาน 4: มูลค่าจ่ายยาแยกหน่วยงาน ----------
   const dispenseByDeptRows = useMemo(() => {
@@ -409,7 +526,15 @@ export default function ReportsPage() {
     reportType === "dispense_by_dept_detail" ? dispenseDetailGroups.flatMap((g) => g.items.map((it) => ({ deptName: g.deptName, ...it }))) :
     reportType === "dispense_by_drug" ? dispenseByDrugRows :
     reportType === "dispense_detail" ? dispenseDetailFlatRows :
+    reportType === "replenish_report" ? replenishByDeptGroups.flatMap((g) => g.items.map((it) => ({ deptName: g.deptName, ...it }))) :
     expiringRows;
+
+  // รายงานที่แสดงผลแบบ "กลุ่มตามหน่วยงาน" (มีบล็อกแยกต่อหน่วยงาน + แถวรวมท้ายบล็อก) ใช้โครง JSX ร่วมกัน
+  const isGroupedReport = reportType === "dispense_by_dept_detail" || reportType === "replenish_report";
+  const groupedData = reportType === "dispense_by_dept_detail" ? dispenseDetailGroups : reportType === "replenish_report" ? replenishByDeptGroups : [];
+  const groupedItemColumns = reportType === "replenish_report" ? replenishItemColumns : detailItemColumns;
+  // จำนวนคอลัมน์ที่ต้องรวมเป็นช่องเดียวสำหรับ label "รวมหน่วยงานนี้" (คอลัมน์ทั้งหมด ลบคอลัมน์ จำนวน/ราคา/มูลค่า ท้ายสุด 3 คอลัมน์)
+  const groupSummaryColSpan = groupedItemColumns.length - 3;
 
   const columns =
     reportType === "stock"
@@ -483,18 +608,22 @@ export default function ReportsPage() {
         ];
 
   function exportExcel() {
-    if (reportType === "dispense_by_dept_detail") {
-      const wsData = [["หน่วยงาน", ...detailItemColumns.map((c) => c.label)]];
-      dispenseDetailGroups.forEach((g) => {
+    if (isGroupedReport) {
+      const wsData = [["หน่วยงาน", ...groupedItemColumns.map((c) => c.label)]];
+      groupedData.forEach((g) => {
         wsData.push([`${g.deptName} (${g.items.length} รายการ)`]);
         g.items.forEach((it) => {
-          wsData.push(["", ...detailItemColumns.map((c) => it[c.key])]);
+          wsData.push(["", ...groupedItemColumns.map((c) => it[c.key])]);
         });
-        wsData.push(["", "", "", "", "รวมหน่วยงานนี้", g.subtotalQty, "", g.subtotalValueText]);
+        const summaryRow = Array(groupedItemColumns.length + 1).fill("");
+        summaryRow[groupSummaryColSpan] = "รวมหน่วยงานนี้";
+        summaryRow[groupSummaryColSpan + 1] = g.subtotalQty;
+        summaryRow[groupSummaryColSpan + 3] = g.subtotalValueText;
+        wsData.push(summaryRow);
         wsData.push([]);
       });
       const ws = XLSX.utils.aoa_to_sheet(wsData);
-      ws["!cols"] = [{ wch: 18 }, ...detailItemColumns.map(() => ({ wch: 18 }))];
+      ws["!cols"] = [{ wch: 18 }, ...groupedItemColumns.map(() => ({ wch: 18 }))];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, activeConfig.label.slice(0, 31));
       const filename = `AVDC-${reportType}-${new Date().toISOString().slice(0, 10)}.xlsx`;
@@ -525,7 +654,7 @@ export default function ReportsPage() {
     XLSX.writeFile(wb, filename);
   }
 
-  const isBusy = loading || (isDateFilteredReport && dispenseLoading);
+  const isBusy = loading || (isDispenseReport && dispenseLoading) || (isReplenishReport && replenishLoading);
 
   function handlePrint() {
     window.print();
@@ -682,8 +811,10 @@ export default function ReportsPage() {
               <Loader2 className="h-4 w-4 animate-spin" /> กำลังโหลดข้อมูล...
             </p>
           )}
-          {dispenseError && (
-            <p className="text-sm font-bold text-red-500">เกิดข้อผิดพลาดในการดึงข้อมูล: {dispenseError.message}</p>
+          {(dispenseError || replenishError) && (
+            <p className="text-sm font-bold text-red-500">
+              เกิดข้อผิดพลาดในการดึงข้อมูล: {(dispenseError || replenishError).message}
+            </p>
           )}
         </div>
 
@@ -710,14 +841,14 @@ export default function ReportsPage() {
           </div>
 
           {/* ตารางรายงาน */}
-          {reportType === "dispense_by_dept_detail" ? (
-            dispenseDetailGroups.length === 0 ? (
+          {isGroupedReport ? (
+            groupedData.length === 0 ? (
               <p className="border border-slate-200 px-2.5 py-6 text-center text-slate-400 rounded-xl">
                 ไม่มีข้อมูลสำหรับรายงานนี้
               </p>
             ) : (
               <div className="space-y-6">
-                {dispenseDetailGroups.map((g) => (
+                {groupedData.map((g) => (
                   <div key={g.deptName} className="break-inside-avoid print:break-inside-avoid">
                     {/* หัวข้อหน่วยงาน */}
                     <div className="mb-1.5 flex items-center justify-between rounded-lg px-3 py-1.5" style={{ backgroundColor: `${NAVY}14` }}>
@@ -731,13 +862,13 @@ export default function ReportsPage() {
                     </div>
                     <table className="w-full border-collapse text-sm print:text-[9.5px]" style={{ tableLayout: "fixed" }}>
                       <colgroup>
-                        {detailItemColumns.map((c) => (
+                        {groupedItemColumns.map((c) => (
                           <col key={c.key} style={{ width: c.width }} />
                         ))}
                       </colgroup>
                       <thead className="print:table-header-group">
                         <tr>
-                          {detailItemColumns.map((c) => (
+                          {groupedItemColumns.map((c) => (
                             <th
                               key={c.key}
                               className={`border border-slate-200 bg-slate-50 px-2.5 py-2 font-bold text-slate-600 print:bg-slate-100 print:px-1.5 print:py-1 break-words ${c.align === "right" ? "text-right" : "text-left"}`}
@@ -750,7 +881,7 @@ export default function ReportsPage() {
                       <tbody>
                         {g.items.map((it, idx) => (
                           <tr key={idx} className="break-inside-avoid print:break-inside-avoid">
-                            {detailItemColumns.map((c) => (
+                            {groupedItemColumns.map((c) => (
                               <td
                                 key={c.key}
                                 className={`border border-slate-200 px-2.5 py-1.5 print:px-1.5 print:py-1 break-words leading-snug ${c.align === "right" ? "text-right font-semibold" : ""}`}
@@ -761,7 +892,7 @@ export default function ReportsPage() {
                           </tr>
                         ))}
                         <tr className="bg-slate-50 font-bold">
-                          <td colSpan={4} className="border border-slate-200 px-2.5 py-1.5 text-right">รวมหน่วยงานนี้</td>
+                          <td colSpan={groupSummaryColSpan} className="border border-slate-200 px-2.5 py-1.5 text-right">รวมหน่วยงานนี้</td>
                           <td className="border border-slate-200 px-2.5 py-1.5 text-right">{g.subtotalQty.toLocaleString("th-TH")}</td>
                           <td className="border border-slate-200 px-2.5 py-1.5"></td>
                           <td className="border border-slate-200 px-2.5 py-1.5 text-right">{g.subtotalValueText}</td>
