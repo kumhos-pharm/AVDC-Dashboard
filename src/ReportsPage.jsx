@@ -198,6 +198,9 @@ export default function ReportsPage() {
     };
   }, [isReplenishReport, dateFrom, dateTo]);
 
+  // สลับมุมมองรายงาน "เติมยาให้หน่วยงาน": จัดกลุ่มตามปลายทาง (ใครได้รับ) หรือต้นทาง (ใครส่งไปให้ใคร)
+  const [replenishGroupBy, setReplenishGroupBy] = useState("dest"); // dest | source
+
   // จับคู่แถว "ออกจากต้นทาง" กับ "เข้าปลายทาง" ด้วย transfer_group_id ให้เหลือ 1 รายการต่อการเติมยา 1 ครั้ง
   const replenishPairs = useMemo(() => {
     if (reportType !== "replenish_report") return [];
@@ -233,19 +236,21 @@ export default function ReportsPage() {
       });
   }, [replenishRaw, reportType]);
 
-  // จัดกลุ่มตามหน่วยงานปลายทาง — ตอบคำถาม "เติมให้ใครบ้าง"
+  // จัดกลุ่มตามหน่วยงาน (ปลายทางหรือต้นทาง แล้วแต่ replenishGroupBy) — ตอบคำถาม "เติมให้ใครบ้าง" หรือ "ต้นทางไหนส่งไปให้ใคร"
   const replenishByDeptGroups = useMemo(() => {
     if (reportType !== "replenish_report") return [];
     const groups = {};
     replenishPairs.forEach((r) => {
-      if (filterDept !== "all" && r.destDept !== filterDept) return;
-      if (!groups[r.destDept]) {
-        groups[r.destDept] = { deptName: r.destDept, items: [], subtotalQty: 0, subtotalValue: 0, missingPriceCount: 0 };
+      const groupKey = replenishGroupBy === "source" ? r.sourceDept : r.destDept;
+      const otherDept = replenishGroupBy === "source" ? r.destDept : r.sourceDept;
+      if (filterDept !== "all" && groupKey !== filterDept) return;
+      if (!groups[groupKey]) {
+        groups[groupKey] = { deptName: groupKey, items: [], subtotalQty: 0, subtotalValue: 0, missingPriceCount: 0 };
       }
-      groups[r.destDept].items.push(r);
-      groups[r.destDept].subtotalQty += r.qty;
-      if (r._lineValueRaw != null) groups[r.destDept].subtotalValue += r._lineValueRaw;
-      else groups[r.destDept].missingPriceCount += 1;
+      groups[groupKey].items.push({ ...r, otherDept });
+      groups[groupKey].subtotalQty += r.qty;
+      if (r._lineValueRaw != null) groups[groupKey].subtotalValue += r._lineValueRaw;
+      else groups[groupKey].missingPriceCount += 1;
     });
     return Object.values(groups)
       .map((g) => ({
@@ -254,11 +259,12 @@ export default function ReportsPage() {
         subtotalValueText: g.subtotalValue.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
       }))
       .sort((a, b) => b.subtotalValue - a.subtotalValue);
-  }, [replenishPairs, reportType, filterDept]);
+  }, [replenishPairs, reportType, filterDept, replenishGroupBy]);
 
-  // คอลัมน์รายการยา ใช้แสดงในตารางย่อยของแต่ละหน่วยงานปลายทาง (รายงาน "เติมยาให้หน่วยงาน")
+  // คอลัมน์รายการยา ใช้แสดงในตารางย่อยของแต่ละหน่วยงาน (รายงาน "เติมยาให้หน่วยงาน")
+  // label คอลัมน์ "otherDept" เปลี่ยนความหมายตามมุมมองที่เลือก: กลุ่มตามปลายทาง -> โชว์ต้นทาง / กลุ่มตามต้นทาง -> โชว์ปลายทาง
   const replenishItemColumns = [
-    { key: "sourceDept", label: "เติมจาก", width: "16%" },
+    { key: "otherDept", label: replenishGroupBy === "source" ? "ส่งไปให้" : "เติมจาก", width: "16%" },
     { key: "drugName", label: "ชื่อยา", width: "22%" },
     { key: "strength", label: "ความแรง", width: "9%" },
     { key: "lot", label: "Lot", width: "12%" },
@@ -700,6 +706,30 @@ export default function ReportsPage() {
             })}
           </div>
 
+          {/* สลับมุมมองรายงาน "เติมยาให้หน่วยงาน" — จัดกลุ่มตามปลายทาง (ใครได้รับ) หรือต้นทาง (ต้นทางไหนส่งไปให้ใคร) */}
+          {reportType === "replenish_report" && (
+            <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <span className="text-xs font-bold text-slate-500">จัดกลุ่มตาม:</span>
+              {[
+                { key: "dest", label: "หน่วยงานปลายทาง (ใครได้รับ)" },
+                { key: "source", label: "ต้นทาง (คลังยา/AVDC ส่งให้ใคร)" },
+              ].map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => setReplenishGroupBy(opt.key)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                    replenishGroupBy === opt.key
+                      ? "bg-[#007bff] text-white"
+                      : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* ตัวกรองช่วงวันที่ (เฉพาะรายงานที่อิงจากประวัติการจ่ายยา) */}
           {isDateFilteredReport && (
             <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:flex-wrap sm:items-end">
@@ -766,7 +796,12 @@ export default function ReportsPage() {
           <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:flex-wrap sm:items-end">
             <div className="flex-1 min-w-[160px]">
               <label className="mb-1 flex items-center gap-1 text-xs font-bold text-slate-500">
-                <SlidersHorizontal className="h-3.5 w-3.5" /> หน่วยงาน
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                {reportType === "replenish_report"
+                  ? replenishGroupBy === "source"
+                    ? "กรองเฉพาะต้นทาง"
+                    : "กรองเฉพาะปลายทาง"
+                  : "หน่วยงาน"}
               </label>
               <select
                 value={filterDept}
