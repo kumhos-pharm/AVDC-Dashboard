@@ -183,7 +183,7 @@ export function useWarehouseMinMax(departmentName = "คลังยา") {
 }
 
 // เติมยาจากคลังไปหน่วยงานปลายทาง (เรียก function ฝั่ง Postgres ที่ทำ 2 movement แบบ atomic)
-export async function transferStock({ drugId, lot, fromDepartmentId, toDepartmentId, qty, mfgDate, expDate, staffName }) {
+export async function transferStock({ drugId, lot, fromDepartmentId, toDepartmentId, qty, mfgDate, expDate, staffName, unitPrice }) {
   const { error } = await supabase.rpc("transfer_stock", {
     p_drug_id: drugId,
     p_lot: lot,
@@ -193,6 +193,9 @@ export async function transferStock({ drugId, lot, fromDepartmentId, toDepartmen
     p_mfg_date: mfgDate || null,
     p_exp_date: expDate || null,
     p_staff_name: staffName || null,
+    // ราคาต่อหน่วยของล็อตนี้ (ถ้ามี) — ต้องแก้ฟังก์ชัน transfer_stock ฝั่ง Postgres ให้รับพารามิเตอร์นี้ด้วย
+    // ไม่งั้นค่านี้จะถูก RPC เพิกเฉยเงียบๆ เหมือนที่เคยเกิดขึ้น (ฝั่ง JS ส่งมาแล้วแต่ฝั่ง SQL ไม่รับ)
+    p_unit_price: unitPrice ?? null,
   });
   if (error) return { error };
 
@@ -221,7 +224,7 @@ export async function transferStock({ drugId, lot, fromDepartmentId, toDepartmen
 // คืนยาทั้งล็อตจากหน่วยงาน กลับเข้า "คลังยา" — ใช้ตอนเติมยาผิด/เกิน แล้วต้องการยกเลิก
 // ต่างจาก removeStockLot ตรงที่ removeStockLot คือ "ตัดจำหน่าย" (ใช้ไปแล้ว/หมดอายุ/ชำรุด) ยอดจะหายไปจากระบบถาวร
 // ส่วนอันนี้คือ "คืนของ" ยอดจะกลับไปบวกที่คลังยาเหมือนเดิม ไม่หายไปไหน
-export async function returnLotToWarehouse({ drugId, lot, departmentId, warehouseDepartmentId, qty, mfgDate, expDate, staffName }) {
+export async function returnLotToWarehouse({ drugId, lot, departmentId, warehouseDepartmentId, qty, mfgDate, expDate, staffName, unitPrice }) {
   return transferStock({
     drugId,
     lot,
@@ -231,5 +234,6 @@ export async function returnLotToWarehouse({ drugId, lot, departmentId, warehous
     mfgDate,
     expDate,
     staffName,
+    unitPrice,
   });
 }
