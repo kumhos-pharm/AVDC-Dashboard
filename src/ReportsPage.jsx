@@ -202,14 +202,16 @@ export default function ReportsPage() {
   const [replenishGroupBy, setReplenishGroupBy] = useState("dest"); // dest | source
 
   // จับคู่แถว "ออกจากต้นทาง" กับ "เข้าปลายทาง" ด้วย transfer_group_id ให้เหลือ 1 รายการต่อการเติมยา 1 ครั้ง
+  // ธุรกรรมยุคเก่า (reason = transfer_in/transfer_out) ไม่มี transfer_group_id บันทึกไว้ — ใช้วิธีจับคู่สำรอง
+  // ด้วย (เวลาบันทึกตรงกันเป๊ะ + ยาตัวเดียวกัน + ล็อตเดียวกัน + จำนวนเท่ากัน) แทน เพราะระบบเดิมบันทึกทั้งสองฝั่งพร้อมกัน
   const replenishPairs = useMemo(() => {
     if (reportType !== "replenish_report") return [];
     const byGroup = {};
     replenishRaw.forEach((r) => {
-      if (!r.transfer_group_id) return;
-      if (!byGroup[r.transfer_group_id]) byGroup[r.transfer_group_id] = {};
-      if (r.reason.endsWith("_out")) byGroup[r.transfer_group_id].out = r;
-      else byGroup[r.transfer_group_id].in = r;
+      const key = r.transfer_group_id || `${r.created_at}|${r.drug_id}|${r.lot}|${Math.abs(r.change_qty)}`;
+      if (!byGroup[key]) byGroup[key] = {};
+      if (r.reason.endsWith("_out")) byGroup[key].out = r;
+      else byGroup[key].in = r;
     });
     const SOURCE_DEPTS = ["คลังยา", "ศูนย์ AVDC (Phar-OPD)"];
     return Object.values(byGroup)
