@@ -496,6 +496,9 @@ function LotRow({ lot, departments, minMax, onDone, onEdit, editingKey, currentS
       mfgDate: lot.mfg_date,
       expDate: lot.exp_date,
       staffName,
+      // ราคาต่อหน่วยของล็อตนี้ (มีอยู่แล้วใน lot object เพราะดึงมาจาก v_warehouse_lots) — จุดนี้เคยหลุดไป
+      // เพราะเดิมไม่ได้ส่งเข้า transferStock เลย ราคาที่ query ด้านล่างเอาไว้ใช้แค่ตอนพิมพ์ใบเติมยาเท่านั้น
+      unitPrice: lot.unit_price ?? null,
     });
     setSaving(false);
 
@@ -601,6 +604,7 @@ function LotRow({ lot, departments, minMax, onDone, onEdit, editingKey, currentS
       mfgDate: lot.mfg_date,
       expDate: lot.exp_date,
       staffName: null,
+      unitPrice: lot.unit_price ?? null,
     });
     setReturning(false);
     if (err) {
@@ -840,6 +844,9 @@ export default function WarehousePage() {
         mfgDate: item.mfgDate,
         expDate: item.expDate,
         staffName: currentStaffName,
+        // ราคาต่อหน่วยที่เก็บไว้ตอนกด "เพิ่มลงตะกร้า" (handleAddToCart) — จุดนี้เคยหลุดไปเหมือนกัน
+        // เพราะเดิมเอาไปใช้แค่ตอนพิมพ์ใบเติมยา (บรรทัดด้านล่าง) ไม่ได้ส่งเข้า DB จริง
+        unitPrice: item.unitPrice,
       });
       if (err) {
         failed.push({ ...item, errorMessage: err.message });
