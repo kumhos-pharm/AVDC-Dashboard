@@ -88,7 +88,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
   const [destDepartmentId, setDestDepartmentId] = useState("");
 
   // หน่วยงานหลัก (ศูนย์ AVDC / Phar-OPD) คือต้นทางเดียวที่เติมยาให้หน่วยงานอื่นได้
-  const homeDepartment = departments.find((d) => d.is_home);
+const sourceDepartments = departments.filter((d) => d.is_home);
 
   // เภสัชกร/เจ้าหน้าที่ผู้จ่าย (ค้นหาแบบ autocomplete จากตาราง staff)
   const [staffList, setStaffList] = useState([]);
