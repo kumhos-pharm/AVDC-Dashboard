@@ -1063,11 +1063,11 @@ const sourceDepartments = departments.filter((d) => d.is_home);
             value={departmentId}
             onChange={handleDepartmentChange}
             required
-            disabled={mode === "replenish"}
+            
             className="w-full rounded-lg border border-[#2f8fdc] px-3 py-2 text-sm h-11 focus:outline-none focus:ring-2 focus:ring-[#2f8fdc] disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed"
           >
             <option value="">เลือกหน่วยงาน</option>
-            {departments.map((d) => (
+            {(mode === "replenish" ? sourceDepartments : departments).map((d) => (
               <option key={d.id} value={d.id}>
                 {d.name}{d.is_home ? " (หน่วยงานหลัก)" : ""}
               </option>
