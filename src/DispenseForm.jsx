@@ -87,8 +87,9 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
   const [mode, setMode] = useState("dispense");
   const [destDepartmentId, setDestDepartmentId] = useState("");
 
-  // หน่วยงานหลัก (ศูนย์ AVDC / Phar-OPD) คือต้นทางเดียวที่เติมยาให้หน่วยงานอื่นได้
-  const homeDepartment = departments.find((d) => d.is_home);
+  // หน่วยงานที่เป็นต้นทางได้ (is_home = true) เช่น ศูนย์ AVDC และ Phar-IPD
+  // ทุกหน่วยงานที่ is_home = true สามารถเติมยาให้หน่วยงานอื่นได้
+  const sourceDepartments = departments.filter((d) => d.is_home);
 
   // เภสัชกร/เจ้าหน้าที่ผู้จ่าย (ค้นหาแบบ autocomplete จากตาราง staff)
   const [staffList, setStaffList] = useState([]);
@@ -219,7 +220,8 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
   };
 
   // สลับโหมด "จ่ายยาให้ผู้ป่วย" <-> "เติมยาหน่วยงาน"
-  // โหมดเติมยา: ล็อกหน่วยงานที่จ่ายเป็น AVDC (ต้นทางเดียว) และล้างข้อมูลผู้ป่วย/หน่วยงานปลายทางเดิมทิ้ง
+  // โหมดเติมยา: ให้ผู้ใช้เลือกต้นทางเองจากหน่วยงาน is_home (AVDC, Phar-IPD ฯลฯ)
+  // ถ้ามีต้นทางเดียวให้ auto-select ให้เลย ถ้ามีหลายตัวให้เลือกเอง
   const handleModeChange = (nextMode) => {
     if (nextMode === mode) return;
     setMode(nextMode);
@@ -246,8 +248,13 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
     setFilteredDrugs([]);
     setShowDropdown(false);
 
-    if (nextMode === "replenish" && homeDepartment) {
-      setDepartmentId(homeDepartment.id);
+    if (nextMode === "replenish") {
+      // ถ้ามีต้นทางเดียว auto-select ให้เลย, ถ้ามีหลายตัวให้ผู้ใช้เลือกเอง
+      if (sourceDepartments.length === 1) {
+        setDepartmentId(sourceDepartments[0].id);
+      } else {
+        setDepartmentId("");
+      }
     } else {
       setDepartmentId("");
     }
@@ -619,7 +626,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
       `🔢 จำนวนที่เติม: ${qty} ${formData.unit || ""}`,
     ];
     if (remainingAtAvdc !== undefined && remainingAtAvdc !== null) {
-      lines.push(`📦 คงเหลือที่ AVDC: ${remainingAtAvdc} ${formData.unit || ""}`);
+      lines.push(`📦 คงเหลือที่ ${sourceDeptName}: ${remainingAtAvdc} ${formData.unit || ""}`);
     }
     lines.push(
       `🏷️ Lot: ${formData.lotNumber || "-"}`,
@@ -743,7 +750,8 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
         return;
       }
       if (replenishQty > formData.maxQuantity) {
-        alert(`ยอดสต็อกไม่พอเติม (คงเหลือที่ AVDC: ${formData.maxQuantity})`);
+        const sourceName = departments.find((d) => String(d.id) === String(departmentId))?.name || "ต้นทาง";
+        alert(`ยอดสต็อกไม่พอเติม (คงเหลือที่ ${sourceName}: ${formData.maxQuantity})`);
         return;
       }
 
@@ -822,7 +830,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
             department_id: destDepartmentId,
             change_qty: replenishQty,
             reason: "replenish_in",
-            note: "รับเติมจากศูนย์ AVDC",
+            note: `รับเติมจาก${departments.find((d) => String(d.id) === String(departmentId))?.name || "ต้นทาง"}`,
             staff_name: formData.staff,
             lot: formData.lotNumber,
             lot_row_id: destLotRowId,
@@ -1063,18 +1071,23 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
             value={departmentId}
             onChange={handleDepartmentChange}
             required
-            disabled={mode === "replenish"}
-            className="w-full rounded-lg border border-[#2f8fdc] px-3 py-2 text-sm h-11 focus:outline-none focus:ring-2 focus:ring-[#2f8fdc] disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed"
+            className="w-full rounded-lg border border-[#2f8fdc] px-3 py-2 text-sm h-11 focus:outline-none focus:ring-2 focus:ring-[#2f8fdc]"
           >
             <option value="">เลือกหน่วยงาน</option>
-            {departments.map((d) => (
+            {/* โหมดเติมยา: แสดงเฉพาะหน่วยงานต้นทาง (is_home = true) เช่น AVDC, Phar-IPD */}
+            {/* โหมดจ่ายยา: แสดงทุกหน่วยงาน */}
+            {(mode === "replenish" ? sourceDepartments : departments).map((d) => (
               <option key={d.id} value={d.id}>
                 {d.name}{d.is_home ? " (หน่วยงานหลัก)" : ""}
               </option>
             ))}
           </select>
-          {mode === "dispense" && !departmentId && (
-            <p className="mt-1 text-[12px] text-red-500">กรุณาเลือกหน่วยงานก่อนค้นหารายการยา</p>
+          {!departmentId && (
+            <p className="mt-1 text-[12px] text-red-500">
+              {mode === "replenish"
+                ? "กรุณาเลือกหน่วยงานต้นทางก่อนค้นหารายการยา"
+                : "กรุณาเลือกหน่วยงานก่อนค้นหารายการยา"}
+            </p>
           )}
         </div>
 
@@ -1089,7 +1102,8 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
               className="w-full rounded-lg border border-[#2f8fdc] px-3 py-2 text-sm h-11 focus:outline-none focus:ring-2 focus:ring-[#2f8fdc]"
             >
               <option value="">เลือกหน่วยงาน</option>
-              {departments.filter((d) => !d.is_home).map((d) => (
+              {/* ปลายทาง = ทุกหน่วยงาน ยกเว้นหน่วยงานที่เลือกเป็นต้นทางอยู่ */}
+              {departments.filter((d) => String(d.id) !== String(departmentId)).map((d) => (
                 <option key={d.id} value={d.id}>{d.name}</option>
               ))}
             </select>
