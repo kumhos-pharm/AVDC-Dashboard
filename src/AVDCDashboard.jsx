@@ -30,6 +30,8 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { useAvdcData } from "./useAvdcData";
+import { supabase } from "./supabaseClient";
+import UsageInsights from "./UsageInsights";
 import avdcLogo from "./assets/avdc-logo.png";
 
 const NAVY = "#0d2a63";
@@ -208,12 +210,54 @@ export default function AVDCDashboard() {
   const [watchStatus, setWatchStatus] = useState(null); // "low" | "near" | "over" — ใช้ตอนเปิด popup รายการที่ต้องติดตาม
   const [cellDetail, setCellDetail] = useState(null); // { drugName, deptName, deptId, cell } — ใช้ตอนคลิกยอดคงเหลือในตารางหลัก (แสดง popup แทนการเปลี่ยนหน้าไปคลังยา)
 
-  // นาฬิกาปัจจุบัน (อัปเดตทุกนาที)
-  const [now, setNow] = useState(new Date());
+  // มูลค่ายาที่จ่ายไป "เดือนนี้" แยกตามหน่วยงาน — ใช้กับการ์ดสรุปใบที่ 5
+  // ดึงตรงจาก stock_movements แยกต่างหาก (ไม่ผ่าน useAvdcData) เพราะเป็นข้อมูลประวัติ ไม่ใช่ยอดคงคลังปัจจุบัน
+  const [dispenseValueLoading, setDispenseValueLoading] = useState(true);
+  const [dispenseByDept, setDispenseByDept] = useState([]); // [{ deptName, qty, value }]
+  const [dispenseMissingPriceCount, setDispenseMissingPriceCount] = useState(0);
+
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 60000);
-    return () => clearInterval(timer);
+    const now = new Date();
+    const from = new Date(now.getFullYear(), now.getMonth(), 1);
+    const to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    let cancelled = false;
+    setDispenseValueLoading(true);
+
+    supabase
+      .from("stock_movements")
+      .select("change_qty, unit_price, departments(name)")
+      .eq("reason", "dispense")
+      .gte("created_at", from.toISOString())
+      .lte("created_at", to.toISOString())
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (!error) {
+          const map = {};
+          let missing = 0;
+          (data || []).forEach((r) => {
+            const deptName = r.departments?.name || "ไม่ระบุหน่วยงาน";
+            const qty = Math.abs(r.change_qty || 0);
+            if (!map[deptName]) map[deptName] = { deptName, qty: 0, value: 0 };
+            map[deptName].qty += qty;
+            if (r.unit_price != null) map[deptName].value += qty * r.unit_price;
+            else missing += 1;
+          });
+          setDispenseByDept(Object.values(map).sort((a, b) => b.value - a.value));
+          setDispenseMissingPriceCount(missing);
+        }
+        setDispenseValueLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  const totalDispenseValue = useMemo(
+    () => dispenseByDept.reduce((sum, d) => sum + d.value, 0),
+    [dispenseByDept]
+  );
 
   // ไปหน้าคลังยา พร้อมค้นหาชื่อยา/หน่วยงานที่ต้องการให้ทันที (ใช้ตอนคลิกยอดที่ต่ำกว่า Min ในตาราง)
   function goToWarehouse({ drugName, departmentId } = {}) {
@@ -428,7 +472,7 @@ export default function AVDCDashboard() {
                 <div className="leading-tight">
                   <div className="font-bold text-slate-400 text-[10.5px] mb-0.5">อัปเดตล่าสุด</div>
                   <div className="font-extrabold text-slate-700 text-xs md:text-sm whitespace-pre-line">
-                    {formatThaiDateTime(now.toISOString())}
+                    {formatThaiDateTime(lastUpdated)}
                   </div>
                 </div>
                 <button
@@ -441,8 +485,8 @@ export default function AVDCDashboard() {
               </div>
             </div>
 
-            {/* การ์ดสรุปทั้ง 4 ใบ (Top Summary Cards) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* การ์ดสรุปทั้ง 5 ใบ (Top Summary Cards) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
               <SummaryCard 
                 customIcon={<MedicineBottleIcon />} 
                 label="รายการ Antidote / Vital Drug" 
@@ -477,14 +521,28 @@ export default function AVDCDashboard() {
                 unit="ล็อต" 
                 borderColor="#fbd7d0"
                 bg="#fff1ee"
-                isLast={true}
                 onClick={() => setActiveModal("expiring")}
+              />
+              <SummaryCard
+                customIcon={<DispenseValueIcon />}
+                label="มูลค่ายาที่จ่ายเดือนนี้"
+                value={dispenseValueLoading ? "…" : totalDispenseValue.toLocaleString("th-TH", { maximumFractionDigits: 0 })}
+                unit="บาท"
+                borderColor="#c3f0e8"
+                bg="#e6faf7"
+                isLast={true}
+                onClick={() => setActiveModal("dispenseValue")}
               />
             </div>
 
           </div>
 
         </div>
+
+        {/* ========================================================================= */}
+        {/* 1.5 แนวโน้มการใช้ยา + Top 5 */}
+        {/* ========================================================================= */}
+        <UsageInsights />
 
         {/* ========================================================================= */}
         {/* 2. ส่วนข้อมูลอื่นๆ ตาราง และไซด์บาร์ */}
@@ -1177,6 +1235,55 @@ export default function AVDCDashboard() {
         })()}
       </DetailModal>
 
+      {/* ================= Modal: มูลค่ายาที่จ่ายเดือนนี้ แยกตามหน่วยงาน ================= */}
+      <DetailModal
+        open={activeModal === "dispenseValue"}
+        onClose={() => setActiveModal(null)}
+        title="มูลค่ายาที่จ่ายเดือนนี้ แยกตามหน่วยงาน"
+        subtitle={`รวมทั้งหมด ${totalDispenseValue.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท`}
+        icon={<DispenseValueIcon className="h-8 w-8 shrink-0" />}
+      >
+        <div className="space-y-2">
+          {dispenseValueLoading && <p className="py-6 text-center text-sm text-slate-400">กำลังโหลดข้อมูล...</p>}
+          {!dispenseValueLoading && dispenseByDept.map((dep) => {
+            const pct = totalDispenseValue > 0 ? Math.round((dep.value / totalDispenseValue) * 100) : 0;
+            return (
+              <div key={dep.deptName} className="rounded-xl border border-slate-100 px-3 py-2.5 text-sm">
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 font-semibold text-slate-700 min-w-0 truncate">
+                    <Building2 className="h-3.5 w-3.5 shrink-0 text-[#0d9488]" /> {dep.deptName}
+                  </span>
+                  <span className="font-black text-slate-800 shrink-0">
+                    {dep.value.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท ({pct}%)
+                  </span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                  <div className="h-full rounded-full bg-[#0d9488]" style={{ width: `${pct}%` }} />
+                </div>
+                <p className="mt-1 text-sm font-normal text-slate-400">{dep.qty.toLocaleString()} หน่วย</p>
+              </div>
+            );
+          })}
+          {!dispenseValueLoading && dispenseByDept.length === 0 && (
+            <p className="py-6 text-center text-sm text-slate-400">ยังไม่มีการจ่ายยาในเดือนนี้</p>
+          )}
+        </div>
+        {!dispenseValueLoading && dispenseMissingPriceCount > 0 && (
+          <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-600">
+            ⚠ มี {dispenseMissingPriceCount} รายการที่ยังไม่มีราคา ยอดรวมด้านบนจึงอาจนับได้ไม่ครบ
+          </p>
+        )}
+        <button
+          onClick={() => {
+            setActiveModal(null);
+            navigate("/admin/reports");
+          }}
+          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#0d9488] py-2.5 text-sm font-bold text-white hover:bg-[#0b7c73]"
+        >
+          <ExternalLink className="h-3.5 w-3.5" /> ดูรายงานฉบับเต็ม
+        </button>
+      </DetailModal>
+
       <footer className="w-full mt-8 py-6 border-t border-slate-200">
         <div className="mx-auto max-w-[1460px] px-4 flex flex-col items-center justify-center gap-3 text-center">
 
@@ -1259,6 +1366,16 @@ function ExpiringSoonIcon({ className = "h-11 w-11 text-[#dc6b4f]" }) {
       <circle cx="32" cy="34" r="22" fill="#fff1ee" stroke="#dc6b4f" strokeWidth="4" />
       <path d="M32 22 V34 L40 40" stroke="#dc6b4f" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
       <rect x="26" y="4" width="12" height="6" rx="2" fill="#dc6b4f" />
+    </svg>
+  );
+}
+
+function DispenseValueIcon({ className = "h-11 w-11 text-[#0d9488]" }) {
+  return (
+    <svg className={className} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="32" cy="32" r="24" fill="#e6faf7" stroke="#0d9488" strokeWidth="4" />
+      <circle cx="32" cy="32" r="15" fill="none" stroke="#0d9488" strokeWidth="2.5" opacity="0.35" />
+      <text x="32" y="41" fill="#0d9488" fontSize="24" fontWeight="900" textAnchor="middle" fontFamily="Kanit, sans-serif">฿</text>
     </svg>
   );
 }
