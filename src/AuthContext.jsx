@@ -3,7 +3,7 @@ import { supabase } from "./supabaseClient";
 import Swal from "sweetalert2";
 
 // ระยะเวลาไม่มีการใช้งานสูงสุด (มิลลิวินาที) ก่อน logout อัตโนมัติ
-const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 นาที
+const IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 นาที
 // แจ้งเตือนล่วงหน้าก่อน logout (มิลลิวินาที)
 const WARN_BEFORE_MS = 60 * 1000; // เตือนก่อน 1 นาที
 
