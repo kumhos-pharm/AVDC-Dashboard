@@ -634,7 +634,7 @@ export default function AVDCDashboard() {
                                 >
                                   <span className="text-[15px] font-extrabold">{cell.quantity}</span>
                                   {cell.max != null && (
-                                    <span className="text-[11px] font-bold text-slate-500">/{cell.max}</span>
+                                    <span className="text-[11px] font-bold text-blue-600">/{cell.max}</span>
                                   )}
                                 </button>
                               ) : (
