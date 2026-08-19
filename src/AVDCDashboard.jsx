@@ -628,10 +628,13 @@ export default function AVDCDashboard() {
                               {hasStock ? (
                                 <button
                                   onClick={() => setCellDetail({ drugName: row.name, deptName: dep.name, deptId: dep.id, cell })}
-                                  className={`mx-auto flex h-8 w-[60px] items-center justify-center rounded-md font-extrabold transition hover:ring-2 hover:ring-offset-1 ${st.text} ${st.bg}`}
-                                  title={`ดูรายละเอียด: ${row.name} (${dep.name})`}
+                                  className={`mx-auto flex h-8 w-[60px] items-center justify-center gap-0.5 rounded-md font-extrabold leading-none transition hover:ring-2 hover:ring-offset-1 ${st.text} ${st.bg}`}
+                                  title={`ดูรายละเอียด: ${row.name} (${dep.name})${cell.max != null ? ` — Max ${cell.max}` : ""}`}
                                 >
-                                  {cell.quantity}
+                                  <span>{cell.quantity}</span>
+                                  {cell.max != null && (
+                                    <span className="text-[10px] font-semibold opacity-60">/{cell.max}</span>
+                                  )}
                                 </button>
                               ) : (
                                 <div className="mx-auto flex h-8 w-[60px] items-center justify-center rounded-md font-extrabold text-slate-300">
