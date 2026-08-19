@@ -35,6 +35,7 @@ import avdcLogo from "./assets/avdc-logo.png";
 const NAVY = "#0d2a63";
 const NAVY_DEEP = "#0a1f4d";
 
+
 const STATUS = {
   ok: { text: "text-slate-700", bg: "", badgeBg: "bg-[#eaf7ef]", badgeText: "text-[#16a34a]", icon: CheckCircle2, dot: "bg-[#22c55e]", label: "เพียงพอ" },
   near: { text: "text-[#d97706] font-bold", bg: "", badgeBg: "bg-[#fef6df]", badgeText: "text-[#b7860b]", icon: AlertTriangle, dot: "bg-[#f2c14e]", label: "ใกล้ต่ำกว่า Min" },
