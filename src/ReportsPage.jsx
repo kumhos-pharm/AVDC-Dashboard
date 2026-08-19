@@ -90,7 +90,7 @@ const REPORT_TYPES = [
   { key: "dispense_by_dept_detail", label: "จ่ายยารายหน่วยงาน (รายการ)", desc: "แต่ละหน่วยงานจ่ายยาอะไรไปบ้าง พร้อมจำนวนและมูลค่าต่อรายการ", icon: Layers },
   { key: "dispense_by_drug", label: "จ่ายยาตามรายชื่อยา", desc: "ยาตัวไหนถูกจ่ายไปมาก/มูลค่าสูงสุด มองภาพรวมทุกหน่วยงาน", icon: Pill },
   { key: "dispense_detail", label: "รายละเอียดรายธุรกรรม", desc: "ประวัติการจ่ายยาทุกรายการ เรียงตามวันที่ ไว้ตรวจสอบย้อนหลัง", icon: ListOrdered },
-  { key: "replenish_report", label: "การเติมยาให้หน่วยงาน", desc: "คลังยา / ศูนย์ AVDC เติมยาให้หน่วยงานไหนบ้าง ตามช่วงวันที่", icon: ArrowLeftRight },
+  { key: "replenish_report", label: "การเติมยาให้หน่วยงาน", desc: "คลังยา / ศูนย์ AVDC / Phar-IPD เติมยาให้หน่วยงานไหนบ้าง ตามช่วงวันที่", icon: ArrowLeftRight },
 ];
 
 // รายงานกลุ่มนี้ดึงจาก stock_movements (มีวันที่จ่ายจริง) ต่างจาก 3 รายงานแรกที่ดึงจากยอดคงคลังปัจจุบัน
@@ -213,7 +213,7 @@ export default function ReportsPage() {
       if (r.reason.endsWith("_out")) byGroup[key].out = r;
       else byGroup[key].in = r;
     });
-    const SOURCE_DEPTS = ["คลังยา", "ศูนย์ AVDC (Phar-OPD)"];
+    const SOURCE_DEPTS = ["คลังยา", "ศูนย์ AVDC (Phar-OPD)", "Phar-IPD"];
     return Object.values(byGroup)
       .filter((pair) => pair.out && pair.in)
       .filter((pair) => SOURCE_DEPTS.includes(pair.out.departments?.name))
@@ -714,7 +714,7 @@ export default function ReportsPage() {
               <span className="text-xs font-bold text-slate-500">จัดกลุ่มตาม:</span>
               {[
                 { key: "dest", label: "หน่วยงานปลายทาง (ใครได้รับ)" },
-                { key: "source", label: "ต้นทาง (คลังยา/AVDC ส่งให้ใคร)" },
+                { key: "source", label: "ต้นทาง (คลังยา/AVDC/IPD ส่งให้ใคร)" },
               ].map((opt) => (
                 <button
                   key={opt.key}
