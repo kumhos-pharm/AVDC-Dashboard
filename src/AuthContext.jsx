@@ -14,6 +14,7 @@ export const ROLES = {
   NURSE: "nurse", // พยาบาลหน่วยงาน
 };
 
+
 export const ROLE_LABELS = {
   [ROLES.ADMIN]: "ผู้ดูแลระบบ",
   [ROLES.PHARMACIST]: "เภสัชกร",
@@ -163,6 +164,9 @@ export function AuthProvider({ children, authClient }) {
     // ฟังการเปลี่ยนแปลงสถานะล็อกอิน (login/logout/refresh token) เฉพาะของโซนนี้
     const { data: listener } = authClient.auth.onAuthStateChange(async (_event, session) => {
       if (!mounted) return;
+      // ตั้ง loading กลับเป็น true ระหว่างที่กำลังโหลด profile ใหม่ (เช่น ตอนเพิ่ง login สำเร็จ)
+      // กันไม่ให้ ProtectedRoute เห็น session แล้วแต่ profile/role ยังไม่มา จนเข้าใจผิดว่า "ไม่มีสิทธิ์" ชั่วคราว
+      setLoading(true);
       setSession(session);
       await syncSharedClient(session);
       if (session?.user) {
@@ -170,6 +174,7 @@ export function AuthProvider({ children, authClient }) {
       } else {
         setProfile(null);
       }
+      setLoading(false);
     });
 
     return () => {
