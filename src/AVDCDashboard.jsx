@@ -35,7 +35,6 @@ import avdcLogo from "./assets/avdc-logo.png";
 const NAVY = "#0d2a63";
 const NAVY_DEEP = "#0a1f4d";
 
-
 const STATUS = {
   ok: { text: "text-slate-700", bg: "", badgeBg: "bg-[#eaf7ef]", badgeText: "text-[#16a34a]", icon: CheckCircle2, dot: "bg-[#22c55e]", label: "เพียงพอ" },
   near: { text: "text-[#d97706] font-bold", bg: "", badgeBg: "bg-[#fef6df]", badgeText: "text-[#b7860b]", icon: AlertTriangle, dot: "bg-[#f2c14e]", label: "ใกล้ต่ำกว่า Min" },
@@ -196,6 +195,7 @@ function formatThaiDateTime(iso) {
     return iso;
   }
 }
+
 
 export default function AVDCDashboard() {
   const { loading, refreshing, error, departments, drugRows, totalDrugCount, totalQuantity, lastUpdated, expiringLots, lotsByDrugDept, reload } = useAvdcData();
@@ -629,12 +629,12 @@ export default function AVDCDashboard() {
                               {hasStock ? (
                                 <button
                                   onClick={() => setCellDetail({ drugName: row.name, deptName: dep.name, deptId: dep.id, cell })}
-                                  className={`mx-auto flex h-8 w-[60px] items-center justify-center gap-0.5 rounded-md font-extrabold leading-none transition hover:ring-2 hover:ring-offset-1 ${st.text} ${st.bg}`}
+                                  className={`mx-auto flex h-8 w-[64px] items-baseline justify-center gap-[3px] rounded-md leading-none transition hover:ring-2 hover:ring-offset-1 ${st.text} ${st.bg}`}
                                   title={`ดูรายละเอียด: ${row.name} (${dep.name})${cell.max != null ? ` — Max ${cell.max}` : ""}`}
                                 >
-                                  <span>{cell.quantity}</span>
+                                  <span className="text-[15px] font-extrabold">{cell.quantity}</span>
                                   {cell.max != null && (
-                                    <span className="text-[10px] font-semibold opacity-60">/{cell.max}</span>
+                                    <span className="text-[11px] font-bold text-slate-500">/{cell.max}</span>
                                   )}
                                 </button>
                               ) : (
