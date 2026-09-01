@@ -254,7 +254,11 @@ const sourceDepartments = departments.filter((d) => d.is_home);
   };
 
   const handleDepartmentChange = (e) => {
-    setDepartmentId(e.target.value);
+    const nextDepartmentId = e.target.value;
+    setDepartmentId(nextDepartmentId);
+    // ถ้าปลายทางที่เลือกไว้ดันตรงกับต้นทางใหม่พอดี (เช่นสลับ Phar-OPD <-> Phar-IPD ไปมา) ให้ล้างปลายทางทิ้ง
+    // กันไม่ให้เลือกหน่วยงานเดียวกันทั้งต้นทางและปลายทาง
+    setDestDepartmentId((prevDest) => (String(prevDest) === String(nextDepartmentId) ? "" : prevDest));
     // เปลี่ยนหน่วยงานแล้ว ต้องล้างยาที่เคยเลือกไว้ เพราะสต็อก/ล็อตผูกกับหน่วยงานเดิม
     setFormData((prev) => ({
       ...prev,
@@ -1089,9 +1093,11 @@ const sourceDepartments = departments.filter((d) => d.is_home);
               className="w-full rounded-lg border border-[#2f8fdc] px-3 py-2 text-sm h-11 focus:outline-none focus:ring-2 focus:ring-[#2f8fdc]"
             >
               <option value="">เลือกหน่วยงาน</option>
-              {departments.filter((d) => !d.is_home).map((d) => (
-                <option key={d.id} value={d.id}>{d.name}</option>
-              ))}
+              {departments
+                .filter((d) => String(d.id) !== String(departmentId))
+                .map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
             </select>
             {!destDepartmentId && (
               <p className="mt-1 text-[12px] text-red-500">กรุณาเลือกหน่วยงานปลายทางก่อนค้นหารายการยา</p>
