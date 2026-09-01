@@ -5,6 +5,8 @@ import { useWarehouseLots, useWarehouseMinMax, updateLotDetails, updateMinMax, r
 import StaffAutocomplete from "./StaffAutocomplete";
 import { alertSuccess, alertError, confirmAction } from "./alert";
 
+
+
 const NAVY = "#0d2a63";
 
 function fmtDate(d) {
