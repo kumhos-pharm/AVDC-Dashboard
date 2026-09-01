@@ -82,28 +82,24 @@ export function useAvdcData() {
 
     // ถ้าหน่วยงานไหนไม่ได้ตั้ง Min/Max ของยาตัวนั้นไว้เอง ให้ใช้ค่า Min/Max ที่ตั้งไว้ที่ "คลังยา"
     // (ค่ากลางของยาตัวนั้น) เป็นค่า default แทน ไม่ต้องให้แต่ละหน่วยงานตั้งซ้ำทุกที่
-    // ข้อยกเว้น: "ศูนย์ AVDC (Phar-OPD)" (หน่วยงาน home) ให้ยึดตามคลังยาเสมอแบบ auto-sync
-    // (ไม่ใช้ค่าที่เคยตั้งแยกไว้เองในอดีต) เพราะศูนย์ AVDC ถือเป็นหน้าตักของคลังยา ไม่ควรมีค่าตั้งเองที่ค้างไม่ตรงกัน
+    // ทุกหน่วยงาน รวมถึง "ศูนย์ AVDC (Phar-OPD)" (หน่วยงาน home) ใช้กติกาเดียวกัน:
+    // ถ้าหน่วยงานนั้นตั้งค่า Min/Max ของตัวเองไว้แล้ว (เช่น ตอนรับยาเข้า) ให้ใช้ค่านั้นก่อนเสมอ
+    // ถ้ายังไม่เคยตั้งไว้ (เป็น null) ค่อย fallback มาใช้ค่ากลางของคลังยาแทน
     const WAREHOUSE_DEPT_NAME = "คลังยา";
     const homeDeptName = deptRows.find((d) => d.is_home)?.name;
     pivoted.forEach((drug) => {
       const warehouseCell = drug.byDept[WAREHOUSE_DEPT_NAME];
       if (!warehouseCell) return;
 
-      // เผื่อกรณีศูนย์ AVDC ยังไม่มี cell เลย (เช่นไม่เคยมีแถวใน v_dashboard_grid) ให้สร้างขึ้นมาเพื่อ sync Min/Max
+      // เผื่อกรณีศูนย์ AVDC ยังไม่มี cell เลย (เช่นไม่เคยมีแถวใน v_dashboard_grid) ให้สร้างขึ้นมาเพื่อรองรับ fallback
       if (homeDeptName && !drug.byDept[homeDeptName]) {
         drug.byDept[homeDeptName] = { quantity: null, min: null, max: null };
       }
 
       Object.entries(drug.byDept).forEach(([deptName, cell]) => {
         if (deptName === WAREHOUSE_DEPT_NAME || !cell) return;
-        if (deptName === homeDeptName) {
-          cell.min = warehouseCell.min;
-          cell.max = warehouseCell.max;
-        } else {
-          if (cell.min == null) cell.min = warehouseCell.min;
-          if (cell.max == null) cell.max = warehouseCell.max;
-        }
+        if (cell.min == null) cell.min = warehouseCell.min;
+        if (cell.max == null) cell.max = warehouseCell.max;
       });
     });
 
