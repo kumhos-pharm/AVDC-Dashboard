@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Building2, Search, Pencil, Trash2, Check, XCircle, Loader2, AlertTriangle, PackageSearch, Undo2 } from "lucide-react";
+import { Building2, Search, Pencil, Trash2, Check, XCircle, Loader2, AlertTriangle, PackageSearch, Undo2, PackageX } from "lucide-react";
 import { useDrugsAndDepartments } from "./useDispense";
 import { useWarehouseLots, useWarehouseMinMax, updateLotDetails, updateMinMax, removeStockLot, returnLotToWarehouse } from "./useWarehouse";
 import StaffAutocomplete from "./StaffAutocomplete";
@@ -46,7 +46,7 @@ function StatusBadge({ qty, min, max }) {
 }
 
 // ---- แถวเดียวของตารางยาในหน่วยงาน พร้อมโหมดแก้ไขแบบ inline, ปุ่มคืนคลัง และปุ่มลบ ----
-function DeptLotRow({ lot, minMax, onDone, warehouseDept, isWarehouseView }) {
+function DeptLotRow({ lot, minMax, onDone, warehouseDept, isWarehouseView, deptName }) {
   const [editing, setEditing] = useState(false);
   const [lotNo, setLotNo] = useState(lot.lot || "");
   const [qty, setQty] = useState(String(lot.quantity ?? ""));
@@ -57,6 +57,7 @@ function DeptLotRow({ lot, minMax, onDone, warehouseDept, isWarehouseView }) {
   const [staffName, setStaffName] = useState("");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [writingOff, setWritingOff] = useState(false);
   const [returning, setReturning] = useState(false);
   const [returnMode, setReturnMode] = useState(false);
   const [returnQty, setReturnQty] = useState(String(lot.quantity ?? ""));
@@ -205,6 +206,38 @@ function DeptLotRow({ lot, minMax, onDone, warehouseDept, isWarehouseView }) {
     onDone?.();
   }
 
+  // ตัดจำหน่ายยาหมดอายุ — ใช้กลไกเดียวกับ removeStockLot (บันทึกลง stock_movements ให้ยอดคงเหลือเป็น 0
+  // ไม่ได้ลบแถวออกจากฐานข้อมูลจริง) แต่ส่ง reason แยกต่างหาก ("expired_writeoff") เพื่อให้ดูประวัติ/
+  // ทำรายงานย้อนหลังแยกจากการ "ลบ" ทั่วไปได้ว่ายอดไหนหายไปเพราะหมดอายุโดยเฉพาะ
+  // ทำที่หน้า "หน่วยงาน" นี้ได้เลย จะได้ตัดให้ถูกหน่วยงานที่มี lot นั้นจริงๆ ไม่ต้องไปหน้าคลังยา
+  async function handleWriteOffExpired() {
+    const ok = await confirmAction({
+      title: "ตัดจำหน่ายยาหมดอายุ?",
+      text: `${lot.drug_name} (Lot ${lot.lot}) จำนวน ${lot.quantity} ที่หน่วยงาน "${deptName || ""}" จะถูกตัดจำหน่ายออกจากยอดคงเหลือ (บันทึกเป็นรายการ "ตัดจำหน่าย/หมดอายุ" ไว้ในประวัติ ไม่ได้ลบข้อมูลออกจากระบบ) — ถ้ากดผิด ต้องแก้ไขยอดคืนเองภายหลัง`,
+      confirmText: "ตัดจำหน่ายเลย",
+      danger: true,
+    });
+    if (!ok) return;
+    setWritingOff(true);
+    const { error: err } = await removeStockLot({
+      drugId: lot.drug_id,
+      departmentId: lot.department_id,
+      lot: lot.lot,
+      mfgDate: lot.mfg_date,
+      expDate: lot.exp_date,
+      quantity: lot.quantity,
+      staffName: null,
+      reason: "expired_writeoff",
+    });
+    setWritingOff(false);
+    if (err) {
+      alertError(err.message);
+      return;
+    }
+    alertSuccess(`ตัดจำหน่าย ${lot.drug_name} (Lot ${lot.lot}) จำนวน ${lot.quantity} เรียบร้อยแล้ว`);
+    onDone?.();
+  }
+
   const isExpiringSoon = lot.exp_date && new Date(lot.exp_date) - new Date() < 90 * 24 * 60 * 60 * 1000;
 
   if (returnMode) {
@@ -336,6 +369,14 @@ function DeptLotRow({ lot, minMax, onDone, warehouseDept, isWarehouseView }) {
             </button>
           )}
           <button
+            onClick={handleWriteOffExpired}
+            disabled={writingOff}
+            className="flex items-center gap-1 rounded-lg bg-orange-50 px-2 py-1.5 text-[11px] font-semibold text-orange-600 transition hover:bg-orange-100 disabled:opacity-50"
+            title="ตัดจำหน่าย (ยาหมดอายุ/ชำรุด — เก็บประวัติไว้ ไม่ลบข้อมูล)"
+          >
+            {writingOff ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PackageX className="h-3.5 w-3.5" />} ตัดจำหน่าย
+          </button>
+          <button
             onClick={handleDelete}
             disabled={deleting}
             className="flex items-center justify-center rounded-lg bg-red-50 p-1.5 text-red-500 transition hover:bg-red-100 disabled:opacity-50"
@@ -461,6 +502,7 @@ export default function DepartmentsPage() {
                       onDone={handleDone}
                       warehouseDept={warehouseDept}
                       isWarehouseView={isWarehouseView}
+                      deptName={activeDept?.name}
                     />
                   ))}
                 </tbody>
