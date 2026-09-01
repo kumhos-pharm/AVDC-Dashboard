@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Warehouse, Search, PackagePlus, Send, Loader2, Pencil, Trash2, X, XCircle, AlertTriangle, SquarePen, Undo2, ShoppingCart, Check } from "lucide-react";
+import { Warehouse, Search, PackagePlus, Send, Loader2, Pencil, Trash2, X, XCircle, AlertTriangle, SquarePen, Undo2, ShoppingCart, Check, PackageX } from "lucide-react";
 import { useDrugsAndDepartments } from "./useDispense";
 import { useWarehouseLots, receiveStock, transferStock, removeStockLot, updateLotDetails, updateMinMax, useWarehouseMinMax, returnLotToWarehouse } from "./useWarehouse";
 import { findOrCreateDrug, updateDrug } from "./useDrugs";
@@ -471,6 +471,7 @@ function LotRow({ lot, departments, minMax, onDone, onEdit, editingKey, currentS
     if (currentStaffName) setStaffName(currentStaffName);
   }, [currentStaffName]);
   const [deleting, setDeleting] = useState(false);
+  const [writingOff, setWritingOff] = useState(false);
   const [returning, setReturning] = useState(false);
   const [error, setError] = useState(null);
 
@@ -645,6 +646,38 @@ function LotRow({ lot, departments, minMax, onDone, onEdit, editingKey, currentS
     onDone?.();
   }
 
+  // ตัดจำหน่ายยาหมดอายุ — ใช้กลไกเดียวกับ removeStockLot (บันทึกลง stock_movements ให้ยอดคงเหลือเป็น 0
+  // ไม่ได้ลบแถวออกจากฐานข้อมูลจริง) แต่ส่ง reason แยกต่างหาก ("expired_writeoff") เพื่อให้ดูประวัติ/
+  // ทำรายงานย้อนหลังแยกจากการ "ลบ" ทั่วไปได้ว่ายอดไหนหายไปเพราะหมดอายุโดยเฉพาะ
+  async function handleWriteOffExpired() {
+    const ok = await confirmAction({
+      title: "ตัดจำหน่ายยาหมดอายุ?",
+      text: `${lot.drug_name} (Lot ${lot.lot}) จำนวน ${lot.quantity} จะถูกตัดจำหน่ายออกจากยอดคงเหลือ (บันทึกเป็นรายการ "ตัดจำหน่าย/หมดอายุ" ไว้ในประวัติ ไม่ได้ลบข้อมูลออกจากระบบ) — ถ้ากดผิด ต้องแก้ไขยอดคืนเองภายหลัง`,
+      confirmText: "ตัดจำหน่ายเลย",
+      danger: true,
+    });
+    if (!ok) return;
+    setWritingOff(true);
+    const { error: err } = await removeStockLot({
+      drugId: lot.drug_id,
+      departmentId: lot.department_id,
+      lot: lot.lot,
+      mfgDate: lot.mfg_date,
+      expDate: lot.exp_date,
+      quantity: lot.quantity,
+      staffName: null,
+      reason: "expired_writeoff",
+    });
+    setWritingOff(false);
+    if (err) {
+      setError(err.message);
+      alertError(err.message);
+      return;
+    }
+    alertSuccess(`ตัดจำหน่าย ${lot.drug_name} (Lot ${lot.lot}) จำนวน ${lot.quantity} เรียบร้อยแล้ว`);
+    onDone?.();
+  }
+
   const isExpiringSoon = lot.exp_date && new Date(lot.exp_date) - new Date() < 90 * 24 * 60 * 60 * 1000;
   const mm = minMax[lot.drug_name] || {};
   const min = lot.min_qty ?? mm.min ?? null;
@@ -688,6 +721,14 @@ function LotRow({ lot, departments, minMax, onDone, onEdit, editingKey, currentS
                 {returning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Undo2 className="h-3.5 w-3.5" />} คืนคลัง
               </button>
             )}
+            <button
+              onClick={handleWriteOffExpired}
+              disabled={writingOff}
+              className="flex items-center gap-1 rounded-lg bg-orange-50 px-2 py-1.5 text-[11px] font-semibold text-orange-600 transition hover:bg-orange-100 disabled:opacity-50"
+              title="ตัดจำหน่าย (ยาหมดอายุ/ชำรุด — เก็บประวัติไว้ ไม่ลบข้อมูล)"
+            >
+              {writingOff ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PackageX className="h-3.5 w-3.5" />} ตัดจำหน่าย
+            </button>
             <button
               onClick={handleDelete}
               disabled={deleting}

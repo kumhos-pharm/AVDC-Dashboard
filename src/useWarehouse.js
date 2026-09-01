@@ -145,7 +145,10 @@ export async function updateMinMax({ departmentId, drugId, min, max }) {
 }
 
 // ลบ lot ออกจากคลัง — หักยอดคงเหลือทั้งหมดของ lot นั้นให้เป็น 0
-export async function removeStockLot({ drugId, departmentId, lot, mfgDate, expDate, quantity, staffName }) {
+// reason ค่าเริ่มต้นคือ "remove" (ปุ่ม "ลบ" ทั่วไปในตาราง) — ปุ่ม "ตัดจำหน่าย" (ยาหมดอายุ) เรียกใช้ฟังก์ชันนี้เหมือนกัน
+// แต่ส่ง reason: "expired_writeoff" เข้ามาแทน เพื่อให้แยกดูในประวัติ/รายงานได้ว่าตัดเพราะอะไร
+// ทั้งสองกรณีไม่ได้ลบแถวออกจากฐานข้อมูลจริง แค่บันทึก movement ให้ยอดคงเหลือกลายเป็น 0 (มีประวัติเก็บไว้ครบ)
+export async function removeStockLot({ drugId, departmentId, lot, mfgDate, expDate, quantity, staffName, reason = "remove" }) {
   const { error } = await supabase.from("stock_movements").insert({
     drug_id: drugId,
     department_id: departmentId,
@@ -153,7 +156,7 @@ export async function removeStockLot({ drugId, departmentId, lot, mfgDate, expDa
     mfg_date: mfgDate || null,
     exp_date: expDate || null,
     change_qty: -quantity,
-    reason: "remove",
+    reason,
     staff_name: staffName || null,
   });
   return { error };
