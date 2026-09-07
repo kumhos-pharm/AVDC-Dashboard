@@ -351,7 +351,7 @@ function ReceiveForm({ drugs, warehouseDeptId, onReceived, editTarget, minMaxByN
             <option value="เม็ด">เม็ด</option>
             <option value="ยาฉีด (Ampoule)">ยาฉีด (Ampoule)</option>
             <option value="ยาฉีด (Vial)">ยาฉีด (Vial)</option>
-            <option value="แคปซูล ">แคปซูล</option>
+            <option value="ยาฉีด (ถุง)">ยาฉีด (ถุง)</option>
             <option value="ซอง (Powder)">ซอง (Powder)</option>
             <option value="ขวด">ขวด</option>
           </select>
