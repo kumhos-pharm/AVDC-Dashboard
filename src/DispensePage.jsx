@@ -306,7 +306,6 @@ export default function DispensePage() {
         </div>
       </footer>
 
-    </div>
 
       {/* ================= Modal คืนยาจากตึก ================= */}
       {showReturnModal && (
