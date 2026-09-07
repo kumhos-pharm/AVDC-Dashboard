@@ -348,9 +348,9 @@ function ReceiveForm({ drugs, warehouseDeptId, onReceived, editTarget, minMaxByN
             className="w-full rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-2.5 text-sm outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-50"
           >
             <option value="">เลือกรูปแบบยา</option>
+            <option value="เม็ด">เม็ด</option>
             <option value="ยาฉีด (Ampoule)">ยาฉีด (Ampoule)</option>
             <option value="ยาฉีด (Vial)">ยาฉีด (Vial)</option>
-            <option value="ยาฉีด (Vial)">ยาฉีด (ถุง)</option>
             <option value="ซอง (Powder)">ซอง (Powder)</option>
             <option value="ขวด">ขวด</option>
           </select>
