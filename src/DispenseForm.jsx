@@ -1,426 +1,1419 @@
 import React, { useState, useEffect } from "react";
-import DispenseForm from "./DispenseForm";
-import DispenseHistory from "./DispenseHistory";
-import { RefreshCw, Calendar, Pill, Database, LogOut, UserCircle2, Undo2, X } from "lucide-react";
+import { Save, Info, X, Plus, Trash2, ShoppingCart, Pencil } from "lucide-react";
 import Swal from "sweetalert2";
-import avdcLogo from "./assets/avdc-logo.png";
-import { useAuth } from "./AuthContext";
-import { supabase } from "./supabaseClient";
+import { supabase } from "./supabaseClient"; // ปรับ path ตามโครงสร้างจริงของคุณ
+import { updateDispense } from "./useDispense";
 
-export default function DispensePage() {
-  const { profile, signOut } = useAuth();
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [currentDateTime, setCurrentDateTime] = useState("");
+// คืนค่าวันที่และเวลาปัจจุบัน (ตามเวลาเครื่องผู้ใช้) ในรูปแบบที่ input type="date"/"time" ต้องการ
+// ใช้เป็นค่าตั้งต้นของฟอร์ม แทนการฝังวันที่/เวลาตายตัวไว้ในโค้ด
+const getCurrentDateStr = () => {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+};
 
-  // แถวจากประวัติที่กำลังถูกแก้ไขอยู่ (null = ไม่ได้แก้ไข, ฟอร์มอยู่ในโหมดจ่ายยาใหม่ตามปกติ)
-  const [editingRow, setEditingRow] = useState(null);
+const getCurrentTimeStr = () => {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, "0");
+  const mi = String(now.getMinutes()).padStart(2, "0");
+  return `${hh}:${mi}`;
+};
 
-  // Modal คืนยาจากตึก
-  const [showReturnModal, setShowReturnModal] = useState(false);
-  const [returnForm, setReturnForm] = useState({
-    drugName: "",
-    lot: "",
-    qty: "",
-    ward: "",
-    staffName: "",
+// ดึงหน่วยนับที่ถูกต้องจาก "รูปแบบยา" แทนคอลัมน์ unit ของ drugs เพราะ unit ไม่เคยถูกตั้งค่าจากหน้า UI ไหนเลย
+// (ไม่มีช่องกรอก unit ในฟอร์มรับยา/แก้ไขยา) ทำให้ค่าเดิมในฐานข้อมูลเป็นค่า default ทั่วไปที่ไม่ตรงกับรูปแบบยาจริง
+// (logic เดียวกับ DispenseHistory.jsx — ต้อง sync กันไว้ ถ้าแก้ที่นี่ให้ไปแก้อีกไฟล์ด้วย)
+const FORM_UNIT_MAP = {
+  "ยาฉีด (Ampoule)": "แอมพูล",
+  "ยาฉีด (Vial)": "ขวด",
+  "ซอง (Powder)": "ซอง",
+  "ขวด": "ขวด",
+};
+const ENGLISH_FORM_GUESS = { powder: "ซอง", vial: "ขวด", ampoule: "แอมพูล", tablet: "เม็ด", capsule: "แคปซูล" };
+function unitFromForm(form) {
+  if (!form) return null;
+  if (FORM_UNIT_MAP[form]) return FORM_UNIT_MAP[form];
+  const match = form.match(/\(([^)]+)\)/);
+  if (match) {
+    const guess = ENGLISH_FORM_GUESS[match[1].trim().toLowerCase()];
+    return guess || null;
+  }
+  return form.trim() || null;
+}
+
+// ตั้งค่าธีมสีของ SweetAlert ให้เข้ากับฟอนต์/โทนสีของระบบ
+const swalBase = {
+  confirmButtonColor: "#007bff",
+  cancelButtonColor: "#94a3b8",
+  customClass: { popup: "font-['Kanit']" },
+};
+
+// props:
+// - onSaved: เรียกหลังบันทึกสำเร็จ (ทั้งกรณีจ่ายยาใหม่ และแก้ไขรายการเดิม)
+// - editingRow: แถวจาก "ประวัติบันทึกล่าสุด" ที่กำลังแก้ไขอยู่ (null = โหมดจ่ายยาใหม่ตามปกติ)
+// - onCancelEdit: เรียกเมื่อผู้ใช้กดยกเลิกการแก้ไข หรือบันทึกการแก้ไขสำเร็จแล้ว
+export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
+  const isEditMode = !!editingRow;
+  const [formData, setFormData] = useState({
+    prefix: "",
+    patientName: "",
+    hn: "",
+    dispenseDate: getCurrentDateStr(),
+    dispenseTime: getCurrentTimeStr(),
+    staff: "",
+    searchDrug: "",
+    drugId: "",
+    lotRowId: "",       // = drug_lots.id (มาจาก v_dispensable_lots.lot_row_id) ใช้ตัดสต็อกล็อตนี้เท่านั้น
+    strength: "",
+    drugType: "",        // = form (รูปแบบยา)
+    unit: "",
+    lotNumber: "",
+    quantity: "",
+    mfgDate: "",          // แสดงผล (พ.ศ.)
+    expDate: "",          // แสดงผล (พ.ศ.)
+    mfgDateRaw: "",        // ค่าจริงไว้บันทึกลง DB
+    expDateRaw: "",
+    maxQuantity: undefined,
+    unitPrice: null,        // ราคาต่อหน่วยของล็อตที่เลือก (มาจาก v_dispensable_lots.unit_price)
   });
-  const [returnLoading, setReturnLoading] = useState(false);
+
+  // หน่วยงานที่จ่าย (ต้องเลือกก่อน เพราะสต็อก/ล็อตที่ค้นหาได้ผูกกับหน่วยงานนี้)
+  const [departmentId, setDepartmentId] = useState("");
   const [departments, setDepartments] = useState([]);
 
-  // โหลดรายชื่อหน่วยงาน (ยกเว้นคลังยา) เพื่อให้เลือกว่าคืนมาจากตึกไหน
+  // โหมดของฟอร์ม: "dispense" = จ่ายยาให้ผู้ป่วย (ปกติ), "replenish" = เติมยาหน่วยงาน (จาก AVDC ไปหน่วยงานอื่น)
+  // สลับโหมดได้เฉพาะตอนจ่ายยาใหม่เท่านั้น (ปิดใช้งานระหว่างแก้ไขรายการเดิมจากประวัติ)
+  const [mode, setMode] = useState("dispense");
+  const [destDepartmentId, setDestDepartmentId] = useState("");
+
+  // หน่วยงานหลัก (ศูนย์ AVDC / Phar-OPD) คือต้นทางเดียวที่เติมยาให้หน่วยงานอื่นได้
+const sourceDepartments = departments.filter((d) => d.is_home);
+
+  // เภสัชกร/เจ้าหน้าที่ผู้จ่าย (ค้นหาแบบ autocomplete จากตาราง staff)
+  const [staffList, setStaffList] = useState([]);
+  const [filteredStaff, setFilteredStaff] = useState([]);
+  const [showStaffDropdown, setShowStaffDropdown] = useState(false);
+  const [staffHighlightIndex, setStaffHighlightIndex] = useState(-1);
+
+  // รายการยาที่จ่ายได้ (จาก view v_dispensable_lots)
+  const [drugList, setDrugList] = useState([]);
+  const [filteredDrugs, setFilteredDrugs] = useState([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [drugHighlightIndex, setDrugHighlightIndex] = useState(-1);
+  const [drugFetchError, setDrugFetchError] = useState("");
+
+  const [loading, setLoading] = useState(false);
+
+  // ตะกร้ายาที่จะจ่ายให้ผู้ป่วยคนนี้ — จ่ายได้หลายรายการยาในการบันทึกครั้งเดียว
+  // แต่ละแถวเก็บยา+ล็อต+จำนวนที่เลือกไว้ ก่อนกด "บันทึกทั้งหมด" ทีเดียว (เฉพาะโหมดจ่ายยาปกติ ไม่ใช้ตอนเติมยา/แก้ไข)
+  const [cart, setCart] = useState([]);
+
   useEffect(() => {
-    supabase
-      .from("departments")
-      .select("id, name")
-      .order("name")
-      .then(({ data }) => setDepartments(data ?? []));
+    fetchDepartments();
+    fetchStaff();
   }, []);
 
-  const handleReturnSubmit = async () => {
-    const { drugName, lot, qty, ward, staffName } = returnForm;
-    if (!drugName.trim() || !lot.trim() || !qty || !ward) {
-      Swal.fire({ icon: "warning", title: "กรุณากรอกข้อมูลให้ครบ", timer: 1500, showConfirmButton: false });
-      return;
-    }
-    if (Number(qty) <= 0) {
-      Swal.fire({ icon: "warning", title: "จำนวนต้องมากกว่า 0", timer: 1500, showConfirmButton: false });
-      return;
-    }
+  // เมื่อผู้ใช้กด "แก้ไข" จากประวัติ ให้ดึงข้อมูลรายการนั้นมาแสดงในฟอร์มนี้แทนการเปิด popup
+  // เติมค่าตั้งต้นจากรายการเดิม แต่ผู้ใช้แก้ไขได้ทุกช่อง รวมถึงหน่วยงาน/รายการยา/ล็อตด้วย
+  useEffect(() => {
+    if (!editingRow) return;
+    setDepartmentId(editingRow.department_id || "");
 
-    setReturnLoading(true);
-
-    // ค้นหา drug_id จากชื่อยา
-    const { data: drugData } = await supabase
-      .from("drugs")
-      .select("id")
-      .ilike("name", drugName.trim())
-      .maybeSingle();
-
-    if (!drugData) {
-      setReturnLoading(false);
-      Swal.fire({ icon: "error", title: "ไม่พบยาในระบบ", text: `ไม่พบ "${drugName}" กรุณาตรวจสอบชื่อยา` });
-      return;
+    // ดึงวันที่และเวลาจากรายการเดิม (created_at หรือ dispensed_at) เพื่อคงวันที่เดิมเมื่อบันทึกแก้ไข
+    // ถ้าไม่มีให้ fallback เป็นวันปัจจุบัน
+    const originalTs = editingRow.created_at || editingRow.dispensed_at || null;
+    let originalDate = getCurrentDateStr();
+    let originalTime = getCurrentTimeStr();
+    if (originalTs) {
+      const d = new Date(originalTs);
+      originalDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      originalTime = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
     }
 
-    // ค้นหา department_id ของคลังยา (ปลายทาง)
-    const { data: warehouseDept } = await supabase
-      .from("departments")
-      .select("id")
-      .ilike("name", "คลังยา")
-      .maybeSingle();
+    setFormData((prev) => ({
+      ...prev,
+      prefix: editingRow.patient_prefix || "",
+      patientName: editingRow.patient_name || "",
+      hn: editingRow.patient_hn || "",
+      dispenseDate: originalDate,
+      dispenseTime: originalTime,
+      staff: editingRow.staff_name || "",
+      searchDrug: editingRow.drug_name || "",
+      drugId: editingRow.drug_id || "",
+      lotRowId: "",
+      strength: editingRow.strength || "",
+      drugType: editingRow.drug_form || editingRow.form || "",
+      // ใช้หน่วยนับที่แปลงจาก "รูปแบบยา" ก่อนเสมอ (แม่นยำกว่า editingRow.unit ดิบที่มาจาก DB โดยตรง)
+      unit: unitFromForm(editingRow.drug_form || editingRow.form) || editingRow.unit || "",
+      lotNumber: editingRow.lot || "",
+      quantity: String(Math.abs(editingRow.change_qty ?? 0)),
+      mfgDate: formatDate(editingRow.mfg_date),
+      expDate: formatDate(editingRow.exp_date),
+      mfgDateRaw: editingRow.mfg_date || "",
+      expDateRaw: editingRow.exp_date || "",
+      maxQuantity: undefined,
+    }));
+    setShowDropdown(false);
+    setShowStaffDropdown(false);
+  }, [editingRow]);
 
-    // บันทึก stock_movements คืนยาเข้าคลัง
-    const { error } = await supabase.from("stock_movements").insert({
-      drug_id: drugData.id,
-      department_id: warehouseDept?.id ?? null,
-      lot: lot.trim(),
-      change_qty: Number(qty),
-      reason: "return_from_ward",
-      note: `คืนจาก: ${departments.find((d) => d.id === Number(ward))?.name ?? ward}`,
-      staff_name: staffName.trim() || profile?.full_name || null,
-    });
-
-    setReturnLoading(false);
-
-    if (error) {
-      Swal.fire({ icon: "error", title: "บันทึกไม่สำเร็จ", text: error.message });
-      return;
+  // เมื่อเลือกหน่วยงานแล้ว ค่อยดึงรายการยาที่จ่ายได้ของหน่วยงานนั้น (เรียงหมดอายุก่อน - FIFO)
+  useEffect(() => {
+    if (departmentId) {
+      fetchDrugs(departmentId);
+    } else {
+      setDrugList([]);
+      setFilteredDrugs([]);
     }
+  }, [departmentId]);
 
-    Swal.fire({ icon: "success", title: "บันทึกคืนยาสำเร็จ", timer: 1500, showConfirmButton: false });
-    setShowReturnModal(false);
-    setReturnForm({ drugName: "", lot: "", qty: "", ward: "", staffName: "" });
-    setRefreshKey((k) => k + 1);
+  const fetchDepartments = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("departments")
+        .select("*")
+        .order("sort_order", { ascending: true });
+
+      if (error) throw error;
+      setDepartments(data || []);
+    } catch (error) {
+      console.error("Error fetching departments:", error.message);
+    }
   };
 
-  const handleLogout = async () => {
-    const result = await Swal.fire({
-      icon: "question",
-      title: "ออกจากระบบ?",
-      text: "ต้องการออกจากระบบหน้าบันทึกจ่ายยาใช่หรือไม่",
-      showCancelButton: true,
-      confirmButtonText: "ออกจากระบบ",
-      cancelButtonText: "ยกเลิก",
-      confirmButtonColor: "#dc2626",
-      cancelButtonColor: "#64748b",
-      reverseButtons: true,
+  const fetchStaff = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("staff")
+        .select("*")
+        .eq("active", true)
+        .order("name", { ascending: true });
+
+      if (error) throw error;
+      setStaffList(data || []);
+    } catch (error) {
+      console.error("Error fetching staff:", error.message);
+    }
+  };
+
+  // ดึงรายการยาที่จ่ายได้ของหน่วยงานนี้ จาก view v_dispensable_lots
+  // (view รวมชื่อยา + ล็อต + สต็อกให้แล้ว) เรียงหมดอายุก่อน (FIFO)
+  const fetchDrugs = async (deptId) => {
+    setDrugFetchError("");
+    try {
+      const { data, error } = await supabase
+        .from("v_dispensable_lots")
+        .select("*")
+        .eq("department_id", deptId)
+        .gt("quantity", 0)
+        .order("exp_date", { ascending: true });
+
+      if (error) throw error;
+      setDrugList(data || []);
+    } catch (error) {
+      console.error("Error fetching drugs:", error.message);
+      setDrugList([]);
+      setDrugFetchError("ไม่สามารถดึงรายการยาได้: " + error.message);
+    }
+  };
+
+  // สลับโหมด "จ่ายยาให้ผู้ป่วย" <-> "เติมยาหน่วยงาน"
+  // โหมดเติมยา: ล็อกหน่วยงานที่จ่ายเป็น AVDC (ต้นทางเดียว) และล้างข้อมูลผู้ป่วย/หน่วยงานปลายทางเดิมทิ้ง
+  const handleModeChange = (nextMode) => {
+    if (nextMode === mode) return;
+    setMode(nextMode);
+    setDestDepartmentId("");
+    setCart([]); // ตะกร้าใช้เฉพาะโหมดจ่ายยาปกติ สลับโหมดแล้วต้องล้างทิ้ง
+    setFormData((prev) => ({
+      ...prev,
+      prefix: "",
+      patientName: "",
+      hn: "",
+      searchDrug: "",
+      drugId: "",
+      lotRowId: "",
+      strength: "",
+      drugType: "",
+      unit: "",
+      lotNumber: "",
+      mfgDate: "",
+      expDate: "",
+      mfgDateRaw: "",
+      expDateRaw: "",
+      maxQuantity: undefined,
+    }));
+    setFilteredDrugs([]);
+    setShowDropdown(false);
+
+    if (nextMode === "replenish" && homeDepartment) {
+      setDepartmentId(homeDepartment.id);
+    } else {
+      setDepartmentId("");
+    }
+  };
+
+  const handleDepartmentChange = (e) => {
+    const nextDepartmentId = e.target.value;
+    setDepartmentId(nextDepartmentId);
+    // ถ้าปลายทางที่เลือกไว้ดันตรงกับต้นทางใหม่พอดี (เช่นสลับ Phar-OPD <-> Phar-IPD ไปมา) ให้ล้างปลายทางทิ้ง
+    // กันไม่ให้เลือกหน่วยงานเดียวกันทั้งต้นทางและปลายทาง
+    setDestDepartmentId((prevDest) => (String(prevDest) === String(nextDepartmentId) ? "" : prevDest));
+    // เปลี่ยนหน่วยงานแล้ว ต้องล้างยาที่เคยเลือกไว้ เพราะสต็อก/ล็อตผูกกับหน่วยงานเดิม
+    setFormData((prev) => ({
+      ...prev,
+      searchDrug: "",
+      drugId: "",
+      lotRowId: "",
+      strength: "",
+      drugType: "",
+      unit: "",
+      lotNumber: "",
+      mfgDate: "",
+      expDate: "",
+      mfgDateRaw: "",
+      expDateRaw: "",
+      maxQuantity: undefined,
+    }));
+    setFilteredDrugs([]);
+    setShowDropdown(false);
+  };
+
+  const handleSearchStaffChange = (e) => {
+    const value = e.target.value;
+    setFormData((prev) => ({ ...prev, staff: value }));
+    setStaffHighlightIndex(-1);
+
+    if (value.trim() === "") {
+      setFilteredStaff([]);
+      setShowStaffDropdown(false);
+      return;
+    }
+
+    const filtered = staffList.filter((s) =>
+      s.name.toLowerCase().includes(value.toLowerCase())
+    );
+    setFilteredStaff(filtered);
+    setShowStaffDropdown(true);
+  };
+
+  const handleSelectStaff = (staffMember) => {
+    setFormData((prev) => ({ ...prev, staff: staffMember.name }));
+    setShowStaffDropdown(false);
+    setStaffHighlightIndex(-1);
+  };
+
+  // เลื่อนเลือกรายชื่อผู้จ่ายด้วยลูกศร ขึ้น/ลง และยืนยันด้วย Enter
+  const handleStaffKeyDown = (e) => {
+    if (!showStaffDropdown || filteredStaff.length === 0) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setStaffHighlightIndex((prev) => (prev + 1) % filteredStaff.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setStaffHighlightIndex((prev) => (prev - 1 + filteredStaff.length) % filteredStaff.length);
+    } else if (e.key === "Enter") {
+      if (staffHighlightIndex >= 0 && staffHighlightIndex < filteredStaff.length) {
+        e.preventDefault();
+        handleSelectStaff(filteredStaff[staffHighlightIndex]);
+      }
+    } else if (e.key === "Escape") {
+      setShowStaffDropdown(false);
+    }
+  };
+
+  const handleSearchDrugChange = (e) => {
+    const value = e.target.value;
+    setFormData((prev) => ({ ...prev, searchDrug: value }));
+    setDrugHighlightIndex(-1);
+
+    if (value.trim() === "") {
+      setFilteredDrugs([]);
+      setShowDropdown(false);
+      return;
+    }
+
+    const filtered = drugList.filter((drug) =>
+      drug.drug_name.toLowerCase().includes(value.toLowerCase())
+    );
+    setFilteredDrugs(filtered);
+    setShowDropdown(true);
+  };
+
+  const handleSelectDrug = (drug) => {
+    setFormData((prev) => ({
+      ...prev,
+      searchDrug: drug.drug_name,
+      drugId: drug.drug_id,
+      lotRowId: drug.lot_row_id,
+      strength: drug.strength || "",
+      drugType: drug.form || "",
+      // ใช้หน่วยนับที่แปลงจาก "รูปแบบยา" ก่อนเสมอ (แม่นยำกว่า) แล้วค่อย fallback ไปที่ drug.unit ดิบจาก DB
+      unit: unitFromForm(drug.form) || drug.unit || "",
+      lotNumber: drug.lot || "",
+      mfgDate: formatDate(drug.mfg_date),
+      expDate: formatDate(drug.exp_date),
+      mfgDateRaw: drug.mfg_date || "",
+      expDateRaw: drug.exp_date || "",
+      maxQuantity: drug.quantity,
+      // ราคาต่อหน่วยของ "ล็อตนี้" ณ ตอนรับเข้า (แช่แข็งราคาไว้ตอนจ่ายจริง ไม่ใช้ราคาปัจจุบันย้อนหลัง
+      // เพราะแต่ละล็อตอาจซื้อมาคนละราคา) — รอ view v_dispensable_lots เพิ่มคอลัมน์นี้ก่อนถึงจะมีค่าจริง
+      unitPrice: drug.unit_price ?? null,
+    }));
+    setShowDropdown(false);
+    setDrugHighlightIndex(-1);
+  };
+
+  // เลื่อนเลือกรายการยาด้วยลูกศร ขึ้น/ลง และยืนยันด้วย Enter
+  const handleDrugKeyDown = (e) => {
+    if (!showDropdown || filteredDrugs.length === 0) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setDrugHighlightIndex((prev) => (prev + 1) % filteredDrugs.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setDrugHighlightIndex((prev) => (prev - 1 + filteredDrugs.length) % filteredDrugs.length);
+    } else if (e.key === "Enter") {
+      if (drugHighlightIndex >= 0 && drugHighlightIndex < filteredDrugs.length) {
+        e.preventDefault();
+        handleSelectDrug(filteredDrugs[drugHighlightIndex]);
+      }
+    } else if (e.key === "Escape") {
+      setShowDropdown(false);
+    }
+  };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return "";
+    const [year, month, day] = dateStr.split("-");
+    return `${day}/${month}/${parseInt(year) + 543}`; // แสดงเป็น พ.ศ. ตามดีไซน์
+  };
+
+  // ล็อตที่ยังไม่มีเลข Lot จริง หรือไม่มีวันหมดอายุ (เช่นค่าเริ่มต้น "INITIAL" ตอนตั้งระบบ)
+  // ถือว่าข้อมูลยังไม่สมบูรณ์ ควรเตือนก่อนจ่ายยา
+  const isLotDataIncomplete =
+    !!formData.drugId &&
+    (!formData.lotNumber ||
+      formData.lotNumber.trim().toUpperCase() === "INITIAL" ||
+      !formData.expDateRaw);
+
+  const resetForm = () => {
+    setFormData({
+      prefix: "",
+      patientName: "",
+      hn: "",
+      dispenseDate: getCurrentDateStr(),
+      dispenseTime: getCurrentTimeStr(),
+      staff: "",
+      searchDrug: "",
+      drugId: "",
+      lotRowId: "",
+      strength: "",
+      drugType: "",
+      unit: "",
+      lotNumber: "",
+      quantity: "",
+      mfgDate: "",
+      expDate: "",
+      mfgDateRaw: "",
+      expDateRaw: "",
+      maxQuantity: undefined,
+    });
+    setCart([]);
+  };
+
+  const handleCancelEdit = () => {
+    resetForm();
+    if (onCancelEdit) onCancelEdit();
+  };
+
+  // เพิ่มยาที่เลือกอยู่ในฟอร์มลงตะกร้า แล้วล้างช่องเลือกยาให้พร้อมเลือกตัวถัดไปทันที
+  const addToCart = () => {
+    if (!formData.drugId || !formData.lotRowId) {
+      alert("กรุณาเลือกรายการยาก่อนเพิ่มลงตะกร้า");
+      return;
+    }
+    const qty = parseInt(formData.quantity);
+    if (!qty || qty <= 0) {
+      alert("กรุณาระบุจำนวนที่จ่ายให้ถูกต้อง");
+      return;
+    }
+    if (formData.maxQuantity !== undefined && qty > formData.maxQuantity) {
+      alert(`ยอดสต็อกไม่พอจ่าย (คงเหลือ: ${formData.maxQuantity})`);
+      return;
+    }
+
+    setCart((prev) => {
+      // กันการเพิ่มล็อตเดียวกันซ้ำ — ถ้ามีอยู่แล้วในตะกร้าให้รวมจำนวนแทนที่จะเพิ่มแถวใหม่
+      const existingIdx = prev.findIndex((it) => it.lotRowId === formData.lotRowId);
+      if (existingIdx >= 0) {
+        const newQty = prev[existingIdx].quantity + qty;
+        if (formData.maxQuantity !== undefined && newQty > formData.maxQuantity) {
+          alert(`ยอดสต็อกไม่พอจ่าย รวมกับที่มีในตะกร้าแล้ว (คงเหลือ: ${formData.maxQuantity})`);
+          return prev;
+        }
+        const merged = [...prev];
+        merged[existingIdx] = { ...merged[existingIdx], quantity: newQty };
+        return merged;
+      }
+      return [
+        ...prev,
+        {
+          drugId: formData.drugId,
+          lotRowId: formData.lotRowId,
+          drugName: formData.searchDrug,
+          strength: formData.strength,
+          drugType: formData.drugType,
+          unit: formData.unit,
+          lotNumber: formData.lotNumber,
+          mfgDateRaw: formData.mfgDateRaw,
+          expDateRaw: formData.expDateRaw,
+          mfgDate: formData.mfgDate,
+          expDate: formData.expDate,
+          quantity: qty,
+          maxQuantity: formData.maxQuantity,
+          unitPrice: formData.unitPrice,
+        },
+      ];
     });
 
-    if (result.isConfirmed) {
-      await signOut();
+    // ล้างเฉพาะช่องเลือกยา เตรียมพร้อมให้เลือกยาตัวถัดไปทันที
+    setFormData((prev) => ({
+      ...prev,
+      searchDrug: "",
+      drugId: "",
+      lotRowId: "",
+      strength: "",
+      drugType: "",
+      unit: "",
+      lotNumber: "",
+      quantity: "",
+      mfgDate: "",
+      expDate: "",
+      mfgDateRaw: "",
+      expDateRaw: "",
+      maxQuantity: undefined,
+      unitPrice: null,
+    }));
+  };
+
+  const removeFromCart = (lotRowId) => {
+    setCart((prev) => prev.filter((it) => it.lotRowId !== lotRowId));
+  };
+
+  // ดึงรายการยาที่อยู่ในตะกร้ากลับมาแสดงในฟอร์มด้านบน เพื่อแก้ไขจำนวน (หรือค่าอื่น) แล้วกด
+  // "เพิ่มลงตะกร้า" ใหม่อีกครั้ง — ระหว่างที่แก้ไข รายการนี้จะถูกดึงออกจากตะกร้าไปก่อนชั่วคราว
+  // กันไม่ให้ค้างซ้ำ 2 รายการถ้าผู้ใช้ยังไม่กดเพิ่มกลับ (เผื่อสลับยาอื่นแทน ก็แค่หายไปจากตะกร้าเฉยๆ ไม่ได้เสียข้อมูลจริง เพราะยังไม่บันทึกลง DB)
+  const editCartItem = (item) => {
+    setFormData((prev) => ({
+      ...prev,
+      searchDrug: item.drugName,
+      drugId: item.drugId,
+      lotRowId: item.lotRowId,
+      strength: item.strength,
+      drugType: item.drugType,
+      unit: item.unit,
+      lotNumber: item.lotNumber,
+      mfgDate: item.mfgDate,
+      expDate: item.expDate,
+      mfgDateRaw: item.mfgDateRaw,
+      expDateRaw: item.expDateRaw,
+      quantity: String(item.quantity),
+      maxQuantity: item.maxQuantity,
+      unitPrice: item.unitPrice,
+    }));
+    removeFromCart(item.lotRowId);
+  };
+
+  // Supabase Edge Function สำหรับส่งแจ้งเตือน LINE + Telegram
+  // (เปลี่ยนจาก Google Apps Script แล้ว — รองรับ CORS + ดูผลลัพธ์ได้จริง)
+  const NOTIFY_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/notify`;
+
+  const notifyLine = async (text) => {
+    try {
+      const res = await fetch(NOTIFY_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ message: text }),
+      });
+      const result = await res.json();
+      if (!result.success) {
+        console.warn("แจ้งเตือนบางช่องทางไม่สำเร็จ:", result);
+      }
+    } catch (err) {
+      console.error("แจ้งเตือนไม่สำเร็จ:", err.message);
+    }
+  };
+
+  // สร้างข้อความสรุปรายการจ่ายยา สำหรับส่งเข้ากลุ่มไลน์ (รูปแบบเดียวกับระบบเดิม)
+  const buildDispenseMessage = (qty, remainingStock) => {
+    const deptName = departments.find((d) => String(d.id) === String(departmentId))?.name || "-";
+    const lines = [
+      "📢 บันทึกจ่ายยาใหม่! 💊",
+      "------------------------------",
+      `🏥 หน่วยงาน: ${deptName}`,
+      `👤 ผู้ป่วย: ${formData.prefix}${formData.patientName || "-"}`,
+      `🆔 HN: ${formData.hn || "-"}`,
+      "------------------------------",
+      "รายการยา:",
+      `🔹 ${formData.searchDrug || "-"}${formData.strength ? ` (${formData.strength})` : ""}`,
+      `📦 รูปแบบ: ${formData.drugType || "-"}`,
+      `🔢 จำนวนจ่าย: ${qty} ${formData.unit || ""}`,
+    ];
+    if (remainingStock !== undefined && remainingStock !== null) {
+      lines.push(`📦 คงเหลือในคลัง: ${remainingStock} ${formData.unit || ""}`);
+    }
+    lines.push(
+      `🏷️ Lot: ${formData.lotNumber || "-"}`,
+      `📅 EXP: ${formData.expDate || "-"}`,
+      "------------------------------",
+      `👤 ผู้บันทึก: ${formData.staff || "-"}`
+    );
+    return lines.join("\n");
+  };
+
+  // สร้างข้อความสรุปรายการจ่ายยา "หลายรายการ" สำหรับส่งเข้ากลุ่มไลน์ (ใช้แทน buildDispenseMessage เดิม
+  // ซึ่งรองรับแค่ 1 รายการ) — วนลูปแสดงทุกยาที่จ่ายในครั้งนี้ต่อจากข้อมูลผู้ป่วย
+  const buildMultiDispenseMessage = (items) => {
+    const deptName = departments.find((d) => String(d.id) === String(departmentId))?.name || "-";
+    const lines = [
+      "📢 บันทึกจ่ายยาใหม่! 💊",
+      "------------------------------",
+      `🏥 หน่วยงาน: ${deptName}`,
+      `👤 ผู้ป่วย: ${formData.prefix}${formData.patientName || "-"}`,
+      `🆔 HN: ${formData.hn || "-"}`,
+      "------------------------------",
+      `รายการยา (${items.length} รายการ):`,
+    ];
+    items.forEach((item, index) => {
+      if (items.length > 1) lines.push(`--- รายการที่ ${index + 1} ---`);
+      lines.push(
+        `🔹 ${item.drugName || "-"}${item.strength ? ` (${item.strength})` : ""}`,
+        `📦 รูปแบบ: ${item.drugType || "-"}`,
+        `🔢 จำนวนจ่าย: ${item.quantity} ${item.unit || ""}`,
+        `📦 คงเหลือในคลัง: ${item.remainingStock ?? "-"} ${item.unit || ""}`,
+        `🏷️ Lot: ${item.lotNumber || "-"}`,
+        `📅 EXP: ${item.expDate || "-"}`
+      );
+    });
+    lines.push(
+      "------------------------------",
+      `👤 ผู้บันทึก: ${formData.staff || "-"}`
+    );
+    return lines.join("\n");
+  };
+
+  // สร้างข้อความสรุปการเติมยาหน่วยงาน สำหรับส่งเข้ากลุ่มไลน์
+  const buildReplenishMessage = (qty, destDeptName, remainingAtAvdc) => {
+    const sourceDeptName = departments.find((d) => String(d.id) === String(departmentId))?.name || "ศูนย์ AVDC (Phar-OPD)";
+    const lines = [
+      "📦 เติมยาหน่วยงาน! 🔄",
+      "------------------------------",
+      `🏥 จาก: ${sourceDeptName}`,
+      `🏥 ถึง: ${destDeptName}`,
+      "------------------------------",
+      "รายการยา:",
+      `🔹 ${formData.searchDrug || "-"}${formData.strength ? ` (${formData.strength})` : ""}`,
+      `📦 รูปแบบ: ${formData.drugType || "-"}`,
+      `🔢 จำนวนที่เติม: ${qty} ${formData.unit || ""}`,
+    ];
+    if (remainingAtAvdc !== undefined && remainingAtAvdc !== null) {
+      lines.push(`📦 คงเหลือที่ AVDC: ${remainingAtAvdc} ${formData.unit || ""}`);
+    }
+    lines.push(
+      `🏷️ Lot: ${formData.lotNumber || "-"}`,
+      `📅 EXP: ${formData.expDate || "-"}`,
+      "------------------------------",
+      `👤 ผู้บันทึก: ${formData.staff || "-"}`
+    );
+    return lines.join("\n");
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    // โหมดแก้ไขรายการเดิม (มาจากการกดปุ่มแก้ไขในประวัติ) — แก้ไขได้ทั้งยา/ล็อต/หน่วยงาน/ผู้ป่วย/จำนวน/ผู้จ่าย
+    // บันทึกผ่าน updateDispense (insert รายการใหม่ตามข้อมูลล่าสุดในฟอร์ม + ลบรายการเดิม)
+    if (isEditMode) {
+      if (
+        !departmentId ||
+        !formData.patientName ||
+        !formData.hn ||
+        !formData.staff ||
+        !formData.drugId ||
+        !formData.quantity
+      ) {
+        alert("กรุณากรอกข้อมูลสำคัญให้ครบถ้วน (หน่วยงาน, ผู้ป่วย, HN, ผู้จ่าย, รายการยา, จำนวน)");
+        return;
+      }
+
+      const editQty = parseInt(formData.quantity);
+      if (editQty <= 0) {
+        alert("จำนวนที่จ่ายต้องมากกว่า 0");
+        return;
+      }
+
+      // เช็คสต็อกคงเหลือเฉพาะกรณีที่เลือกล็อตใหม่ (มี maxQuantity จากล็อตที่เพิ่งเลือก)
+      // ถ้าไม่ได้เปลี่ยนยา/ล็อตเลย (ยังเป็นค่าจากรายการเดิม) จะไม่มี maxQuantity ให้เช็ค เหมือนพฤติกรรมเดิม
+      if (formData.maxQuantity !== undefined && editQty > formData.maxQuantity) {
+        alert(`ยอดสต็อกไม่พอจ่าย (คงเหลือ: ${formData.maxQuantity})`);
+        return;
+      }
+
+      const confirmResult = await Swal.fire({
+        ...swalBase,
+        icon: "question",
+        title: "ยืนยันการแก้ไขรายการนี้?",
+        text: "ระบบจะบันทึกรายการใหม่แทนรายการเดิม และปรับยอดสต็อกให้อัตโนมัติ",
+        showCancelButton: true,
+        confirmButtonText: "บันทึกการแก้ไข",
+        cancelButtonText: "ยกเลิก",
+        reverseButtons: true,
+      });
+      if (!confirmResult.isConfirmed) return;
+
+      setLoading(true);
+
+      // สร้าง ISO timestamp จากวันที่/เวลาในฟอร์ม เพื่อให้ผู้ใช้แก้ไขวันที่-เวลาจ่ายยาได้
+      // ใช้ค่าจาก formData.dispenseDate + dispenseTime (ซึ่งโหลดมาจากรายการเดิมตอนเปิดฟอร์ม
+      // และผู้ใช้สามารถแก้ไขได้) ไม่ใช้ editingRow.created_at ตรง ๆ เพื่อให้รองรับการแก้วันที่ด้วย
+      let createdAtFromForm = null;
+      if (formData.dispenseDate && formData.dispenseTime) {
+        // รวม date + time เป็น ISO string โดยใช้ timezone ของเครื่องผู้ใช้
+        createdAtFromForm = new Date(`${formData.dispenseDate}T${formData.dispenseTime}:00`).toISOString();
+      } else {
+        // fallback: ใช้ created_at เดิมจาก DB ถ้าฟอร์มไม่มีค่า
+        createdAtFromForm = editingRow.created_at || editingRow.dispensed_at || null;
+      }
+      // DEBUG: ลบบรรทัดนี้ทิ้งได้หลังแก้ปัญหาเสร็จ
+      console.log("[DEBUG] formData.dispenseDate:", formData.dispenseDate, "formData.dispenseTime:", formData.dispenseTime, "=> createdAtFromForm:", createdAtFromForm);
+
+      const payload = {
+        drug_id: formData.drugId,
+        department_id: departmentId,
+        lot: formData.lotNumber,
+        lot_row_id: formData.lotRowId || editingRow.lot_row_id || null,
+        mfg_date: formData.mfgDateRaw || null,
+        exp_date: formData.expDateRaw || null,
+        note: editingRow.note,
+        change_qty: -editQty,
+        patient_prefix: formData.prefix,
+        patient_name: formData.patientName,
+        patient_hn: formData.hn,
+        staff_name: formData.staff,
+        // ส่งวันที่-เวลาจากฟอร์ม (ที่ผู้ใช้อาจแก้ไขแล้ว) ให้ updateDispense นำไป patch ผ่าน RPC
+        ...(createdAtFromForm ? { created_at: createdAtFromForm } : {}),
+        // ถ้าไม่ได้เปลี่ยนล็อต (ไม่มี unitPrice ใหม่จากการเลือกยาใหม่) ให้คงราคาเดิมของรายการนี้ไว้ ไม่ล้างเป็น null
+        unit_price: formData.unitPrice ?? editingRow.unit_price ?? null,
+      };
+
+      const { error } = await updateDispense(editingRow.id, payload);
+      setLoading(false);
+
+      if (error) {
+        Swal.fire({ ...swalBase, icon: "error", title: "แก้ไขไม่สำเร็จ", text: error.message });
+        return;
+      }
+
+      Swal.fire({ ...swalBase, icon: "success", title: "แก้ไขรายการแล้ว", timer: 1500, showConfirmButton: false });
+      notifyLine(`✏️ แก้ไขรายการ\n${buildDispenseMessage(editQty)}`);
+      resetForm();
+      if (onCancelEdit) onCancelEdit();
+      if (onSaved) onSaved();
+      return;
+    }
+
+    // โหมดเติมยาหน่วยงาน: ตัดสต็อกจาก AVDC (ต้นทาง) แล้วบวกเข้าล็อตของหน่วยงานปลายทาง
+    if (mode === "replenish") {
+      if (
+        !departmentId ||
+        !destDepartmentId ||
+        !formData.staff ||
+        !formData.lotRowId ||
+        !formData.quantity
+      ) {
+        alert("กรุณากรอกข้อมูลสำคัญให้ครบถ้วน (หน่วยงานปลายทาง, ผู้บันทึก, รายการยา, จำนวน)");
+        return;
+      }
+
+      const replenishQty = parseInt(formData.quantity);
+      if (replenishQty <= 0) {
+        alert("จำนวนที่เติมต้องมากกว่า 0");
+        return;
+      }
+      if (replenishQty > formData.maxQuantity) {
+        alert(`ยอดสต็อกไม่พอเติม (คงเหลือที่ AVDC: ${formData.maxQuantity})`);
+        return;
+      }
+
+      const destDeptName = departments.find((d) => String(d.id) === String(destDepartmentId))?.name || "-";
+
+      // รหัสจับคู่ระหว่างแถว replenish_out (AVDC) กับ replenish_in (หน่วยงานปลายทาง) ของการเติมยาครั้งนี้
+      // ใช้ตอนกด "ยกเลิกการเติมยา" ในหน้าประวัติ เพื่อลบทั้งคู่พร้อมกันแบบแม่นยำ 100%
+      // (ไม่ต้องเดาจากยา/ล็อต/เวลา ซึ่งเสี่ยงจับคู่ผิดถ้ามีรายการซ้ำในเวลาใกล้กัน)
+      const transferGroupId = crypto.randomUUID();
+
+      setLoading(true);
+      try {
+        // 1. บันทึกประวัติฝั่งตัดออกจาก AVDC ลง stock_movements
+        const { error: outError } = await supabase.from("stock_movements").insert([
+          {
+            drug_id: formData.drugId,
+            department_id: departmentId,
+            change_qty: -replenishQty,
+            reason: "replenish_out",
+            note: `เติมให้ ${destDeptName}`,
+            staff_name: formData.staff,
+            lot: formData.lotNumber,
+            lot_row_id: formData.lotRowId,
+            mfg_date: formData.mfgDateRaw || null,
+            exp_date: formData.expDateRaw || null,
+            transfer_group_id: transferGroupId,
+            // ราคาต่อหน่วยของล็อตนี้ (จากคลังยา) พาไปด้วย เพื่อไม่ให้ราคาหายตอนโอนย้ายหน่วยงาน
+            unit_price: formData.unitPrice,
+          },
+        ]);
+        if (outError) throw outError;
+
+        // 2. หักสต็อกล็อตต้นทางที่ AVDC ทำโดย trigger `trg_apply_stock_movement` อัตโนมัติจากขั้นตอนที่ 1
+        // (ไม่ต้อง .update() drug_lots เอง มิเช่นนั้นจะหักซ้ำ 2 เด้ง)
+        const newSourceQty = formData.maxQuantity - replenishQty; // ใช้แค่โชว์ในข้อความแจ้งเตือนเท่านั้น
+
+        // 3. หาล็อตเดิมที่หน่วยงานปลายทาง (ยา+เลขล็อตเดียวกัน)
+        // ถ้ามีอยู่แล้ว ไม่ต้อง update quantity เอง เดี๋ยว trigger จะบวกให้จากขั้นตอนที่ 4
+        // ถ้ายังไม่มี ต้องสร้างล็อตใหม่ไว้ก่อนเพื่อให้มี id ให้ trigger อ้างอิงได้ โดยตั้ง quantity เริ่มต้น = 0
+        // (ห้ามตั้งเป็นจำนวนที่เติมตรงนี้ เพราะ trigger จะมาบวกทับให้อีกที กลายเป็นบวกซ้ำ 2 เท่า)
+        const { data: existingLot, error: findError } = await supabase
+          .from("drug_lots")
+          .select("id, quantity")
+          .eq("drug_id", formData.drugId)
+          .eq("department_id", destDepartmentId)
+          .eq("lot", formData.lotNumber)
+          .maybeSingle();
+        if (findError) throw findError;
+
+        let destLotRowId = null;
+        if (existingLot) {
+          destLotRowId = existingLot.id;
+        } else {
+          const { data: newLot, error: destInsertError } = await supabase
+            .from("drug_lots")
+            .insert([
+              {
+                drug_id: formData.drugId,
+                department_id: destDepartmentId,
+                lot: formData.lotNumber,
+                mfg_date: formData.mfgDateRaw || null,
+                exp_date: formData.expDateRaw || null,
+                quantity: 0,
+              },
+            ])
+            .select()
+            .single();
+          if (destInsertError) throw destInsertError;
+          destLotRowId = newLot?.id || null;
+        }
+
+        // 4. บันทึกประวัติฝั่งรับเข้าที่หน่วยงานปลายทาง (ไปโผล่ในเมนู "เติมยาหน่วยงาน" ของหน่วยงานนั้น)
+        const { error: inError } = await supabase.from("stock_movements").insert([
+          {
+            drug_id: formData.drugId,
+            department_id: destDepartmentId,
+            change_qty: replenishQty,
+            reason: "replenish_in",
+            note: "รับเติมจากศูนย์ AVDC",
+            staff_name: formData.staff,
+            lot: formData.lotNumber,
+            lot_row_id: destLotRowId,
+            mfg_date: formData.mfgDateRaw || null,
+            exp_date: formData.expDateRaw || null,
+            transfer_group_id: transferGroupId,
+            // ราคาต่อหน่วยเดียวกับฝั่งตัดออก (บรรทัดข้างบน) — ทำให้ล็อตที่หน่วยงานปลายทาง
+            // มีราคาให้ v_dispensable_lots ดึงไปใช้ตอนจ่ายยาต่อได้ทันที ไม่ต้องรอราคาจากที่อื่น
+            unit_price: formData.unitPrice,
+          },
+        ]);
+        if (inError) throw inError;
+
+        // 5. แดชบอร์ด (v_dashboard_grid) จะแสดงยาของหน่วยงานหนึ่ง ๆ ได้ก็ต่อเมื่อมีแถว drug_targets
+        // (department_id, drug_id) อยู่แล้วเท่านั้น — ถ้าหน่วยงานปลายทางไม่เคยมียานี้ในรายการเป้าหมายมาก่อน
+        // การเติมยาจะบันทึกสำเร็จ แต่ตัวเลขจะไม่ขึ้นในตาราง "ยาที่มีในหน่วยงาน" ของแดชบอร์ดเลย
+        // จึงต้องสร้างแถวเปล่าให้อัตโนมัติเหมือนที่ทำไว้แล้วในโหมดจ่ายยา (useDispense.js) และรับยาเข้าคลัง (useWarehouse.js)
+        const { data: existingTarget } = await supabase
+          .from("drug_targets")
+          .select("id")
+          .eq("department_id", destDepartmentId)
+          .eq("drug_id", formData.drugId)
+          .maybeSingle();
+
+        if (!existingTarget) {
+          await supabase.from("drug_targets").insert({
+            department_id: destDepartmentId,
+            drug_id: formData.drugId,
+            min_qty: null,
+            max_qty: null,
+          });
+        }
+
+        Swal.fire({
+          ...swalBase,
+          icon: "success",
+          title: "เติมยาสำเร็จ",
+          text: `เติมยาให้ ${destDeptName} เรียบร้อยแล้ว`,
+          timer: 1500,
+          showConfirmButton: false,
+        });
+        notifyLine(buildReplenishMessage(replenishQty, destDeptName, newSourceQty));
+
+        resetForm();
+        fetchDrugs(departmentId);
+        if (onSaved) onSaved();
+      } catch (error) {
+        console.error("Error replenishing drug:", error.message);
+        alert("ล้มเหลว: " + error.message);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // โหมดจ่ายยาให้ผู้ป่วย (ปกติ) — รองรับจ่ายได้หลายรายการยาในการบันทึกครั้งเดียวผ่าน "ตะกร้า"
+    // ถ้ายังไม่ได้กด "เพิ่มลงตะกร้า" แต่กรอกยาไว้ในฟอร์มครบแล้ว ให้ถือว่าเป็นรายการเดียวและจ่ายไปเลย
+    // (ไม่บังคับต้องกดเพิ่มตะกร้าเสมอไป เผื่อกรณีจ่ายแค่ยาตัวเดียว)
+    let itemsToSubmit = cart;
+    if (itemsToSubmit.length === 0 && formData.drugId && formData.lotRowId && formData.quantity) {
+      itemsToSubmit = [
+        {
+          drugId: formData.drugId,
+          lotRowId: formData.lotRowId,
+          drugName: formData.searchDrug,
+          strength: formData.strength,
+          drugType: formData.drugType,
+          unit: formData.unit,
+          lotNumber: formData.lotNumber,
+          mfgDateRaw: formData.mfgDateRaw,
+          expDateRaw: formData.expDateRaw,
+          mfgDate: formData.mfgDate,
+          expDate: formData.expDate,
+          quantity: parseInt(formData.quantity),
+          maxQuantity: formData.maxQuantity,
+          unitPrice: formData.unitPrice,
+        },
+      ];
+    }
+
+    if (
+      !departmentId ||
+      !formData.patientName ||
+      !formData.hn ||
+      !formData.staff ||
+      itemsToSubmit.length === 0
+    ) {
+      alert("กรุณากรอกข้อมูลสำคัญให้ครบถ้วน (หน่วยงาน, ผู้ป่วย, HN, ผู้จ่าย, รายการยาอย่างน้อย 1 รายการ)");
+      return;
+    }
+
+    // ตรวจสอบจำนวนของทุกรายการในตะกร้าอีกครั้งก่อนบันทึกจริง (กันสต็อกไม่พอ)
+    for (const item of itemsToSubmit) {
+      if (!item.quantity || item.quantity <= 0) {
+        alert(`จำนวนที่จ่ายของ "${item.drugName}" ต้องมากกว่า 0`);
+        return;
+      }
+      if (item.maxQuantity !== undefined && item.quantity > item.maxQuantity) {
+        alert(`ยอดสต็อกไม่พอจ่าย "${item.drugName}" (คงเหลือ: ${item.maxQuantity})`);
+        return;
+      }
+    }
+
+    setLoading(true);
+
+    try {
+      // ใช้ batch_group_id เชื่อมทุกยาที่จ่ายพร้อมกันในครั้งนี้ (เหมือน transfer_group_id ของโหมดเติมยา)
+      // ถ้าจ่ายรายการเดียวก็ยังใส่ไว้ได้ ไม่มีผลเสีย แต่ฝั่งแสดงผลจะรวมเป็นการ์ดเดียวก็ต่อเมื่อมี > 1 รายการ
+      const batchGroupId = itemsToSubmit.length > 1 ? crypto.randomUUID() : null;
+
+      // 1. บันทึกประวัติการจ่ายยาทุกรายการในตะกร้าลง stock_movements ในคำสั่งเดียว (batch insert)
+      // change_qty ติดลบเสมอ = จ่ายออก — ทุกแถวใช้ข้อมูลผู้ป่วย/หน่วยงาน/ผู้จ่ายชุดเดียวกัน ต่างกันแค่ยา/ล็อต/จำนวน
+      const rows = itemsToSubmit.map((item) => ({
+        drug_id: item.drugId,
+        department_id: departmentId,
+        change_qty: -item.quantity,
+        reason: "dispense",
+        note: null,
+        staff_name: formData.staff,
+        lot: item.lotNumber,
+        lot_row_id: item.lotRowId,
+        mfg_date: item.mfgDateRaw || null,
+        exp_date: item.expDateRaw || null,
+        patient_prefix: formData.prefix,
+        patient_name: formData.patientName,
+        patient_hn: formData.hn,
+        unit_price: item.unitPrice,
+        batch_group_id: batchGroupId,
+      }));
+
+      const { error: insertError } = await supabase.from("stock_movements").insert(rows);
+      if (insertError) throw insertError;
+
+      // 2. หักยอดสต็อกของทุกล็อตทำโดย trigger `trg_apply_stock_movement` อัตโนมัติ (ทำงานตอน insert ข้างบน)
+      // ไม่ต้อง .update() drug_lots เองอีก มิเช่นนั้นจะหักซ้ำ 2 เด้ง
+
+      // 3. ดึงยอดคงเหลือหลัง trigger หักสต็อกแล้ว
+      const lotIds = itemsToSubmit.map((item) => item.lotRowId);
+      const { data: updatedLots } = await supabase
+        .from("drug_lots")
+        .select("id, quantity")
+        .in("id", lotIds);
+      const remainingMap = {};
+      (updatedLots || []).forEach((lot) => { remainingMap[lot.id] = lot.quantity; });
+      const itemsWithRemaining = itemsToSubmit.map((item) => ({
+        ...item,
+        remainingStock: remainingMap[item.lotRowId] ?? "-",
+      }));
+
       Swal.fire({
+        ...swalBase,
         icon: "success",
-        title: "ออกจากระบบแล้ว",
-        timer: 1200,
+        title: "บันทึกสำเร็จ",
+        text: `บันทึกข้อมูลและตัดสต็อกเรียบร้อยแล้ว (${itemsToSubmit.length} รายการ)`,
+        timer: 1500,
         showConfirmButton: false,
       });
+      notifyLine(buildMultiDispenseMessage(itemsWithRemaining));
+
+      resetForm();
+      fetchDrugs(departmentId);
+      if (onSaved) onSaved();
+
+    } catch (error) {
+      console.error("Error dispensing drug:", error.message);
+      alert("ล้มเหลว: " + error.message);
+    } finally {
+      setLoading(false);
     }
-  };
-
-  // ฟังก์ชันจัดฟอร์แมตวันเวลาภาษาไทยให้สวยงามและเป็นปัจจุบันจริง
-  const updateDateTime = () => {
-    const now = new Date();
-    const days = [
-      "วันอาทิตย์", "วันจันทร์", "วันอังคาร", "วันพุธ", "วันพฤหัสบดี", "วันศุกร์", "วันเสาร์"
-    ];
-    const months = [
-      "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
-      "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
-    ];
-    
-    const dayName = days[now.getDay()];
-    const date = now.getDate();
-    const monthName = months[now.getMonth()];
-    const thaiYear = now.getFullYear() + 543;
-    
-    const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(
-      now.getMinutes()
-    ).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
-
-    setCurrentDateTime(`${dayName}ที่ ${date} ${monthName} ${thaiYear} | ${timeStr} น.`);
-  };
-
-  // อัปเดตเวลาครั้งแรก และทุกๆ 1 วินาทีเพื่อให้เวลาเดินตลอด (หรืออัปเดตเมื่อกด Refresh)
-  useEffect(() => {
-    updateDateTime();
-    const timer = setInterval(updateDateTime, 1000);
-    return () => clearInterval(timer);
-  }, [refreshKey]);
-
-  const handleRefresh = () => {
-    setIsRefreshing(true);
-    setRefreshKey((k) => k + 1);
-    setTimeout(() => setIsRefreshing(false), 600);
   };
 
   return (
-    <div className="min-h-screen w-full bg-[#eef1f6] p-4 font-['Kanit'] md:p-6 flex flex-col justify-between">
+    <div className="rounded-2xl border-2 border-[#007bff]/40 bg-white p-4 sm:p-6 md:p-7 shadow-[0_2px_16px_-4px_rgba(15,23,42,0.08)] font-['Kanit'] w-full max-w-xl mx-auto relative h-full flex flex-col justify-between">
       
-      {/* ส่วนเนื้อหาหลักด้านบน */}
-      <div className="mx-auto w-full max-w-[1600px] space-y-4 flex-grow">
+      <form onSubmit={handleSubmit} className="space-y-4 flex-grow">
         
-        {/* ================= ส่วน Header ดีไซน์ใหม่ใส่โลโก้ AVDC ================= */}
-        <div className="relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between rounded-2xl bg-gradient-to-br from-[#eaf4ff] via-white to-[#f1faf5] p-4 md:p-5 shadow-[0_6px_24px_-8px_rgba(15,23,42,0.12)] gap-4 border border-white">
-
-          {/* แถบสีบางๆ ด้านล่าง เชื่อมโทนฟ้า (สีหลักของระบบ) กับเขียว (สีของประวัติ) ให้เป็นเอกลักษณ์เดียวกันทั้งหน้า */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[3px] bg-gradient-to-r from-[#007bff] via-[#4a9bd1] to-[#198754]" />
-
-          {/* ฝั่งซ้าย: โลโก้ใหม่ + ชื่อระบบตามสั่ง */}
-          <div className="flex items-center gap-4 pl-1">
-            {/* กล่องใส่โลโก้ AVDC */}
-            <div className="h-14 w-14 sm:h-20 sm:w-20 md:h-38 md:w-38 flex-shrink-0 bg-white p-1 rounded-xl border border-slate-100 shadow-sm">
-          
-  <img
-  src={avdcLogo}
-  alt="AVDC Logo"
-  className="h-full w-full object-contain"
-/>
-
-            </div>
-            
-            {/* ข้อความชื่อระบบ */}
-            <div className="min-w-0">
-              <h1 className="whitespace-nowrap text-[15px] xs:text-base sm:text-lg md:text-2xl font-extrabold text-[#0056b3] tracking-tight leading-tight">
-                ระบบบันทึกจ่ายยา Antidote & Vital Drug
-              </h1>
-              <p className="text-sm md:text-base font-bold text-slate-600 mt-0.5">
-                กลุ่มงานเภสัชกรรม รพ.กุมภวาปี
-              </p>
-            </div>
+        {/* หัวข้อฟอร์ม */}
+        <div className="flex items-center gap-2 mb-4">
+          <div className="p-1 text-[#007bff]">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
           </div>
+          <h2 className="text-xl font-bold text-[#0056b3]">บันทึกการจ่ายยา</h2>
+        </div>
 
-          {/* ฝั่งขวา: แสดง วันที่ และ เวลาปัจจุบัน (Real-time) */}
-          <div className="flex items-center gap-3 rounded-xl bg-white/70 backdrop-blur-sm border border-white p-3 self-stretch md:self-auto justify-between md:justify-start shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-blue-50 text-[#007bff]">
-                <Calendar className="h-5 w-5" />
-              </div>
-              <div className="text-left">
-                <span className="block whitespace-nowrap text-[11px] font-bold text-slate-400 uppercase tracking-wider leading-none mb-1">
-                  วันที่และเวลาอัปเดตล่าสุด
-                </span>
-                <span className="block whitespace-nowrap text-[13px] sm:text-sm font-extrabold text-slate-700">
-                  {currentDateTime}
-                </span>
-              </div>
-            </div>
-            
-            <button 
-              onClick={handleRefresh}
-              disabled={isRefreshing}
-              className={`p-2 rounded-lg bg-slate-100/80 text-slate-500 border border-slate-200/80 hover:bg-slate-200 hover:text-slate-700 active:scale-95 transition-all ml-2 ${
-                isRefreshing ? "animate-spin text-blue-500" : ""
+        {/* แท็บสลับโหมด: จ่ายยาให้ผู้ป่วย / เติมยาหน่วยงาน (ซ่อนระหว่างแก้ไขรายการเดิม) */}
+        {!isEditMode && (
+          <div className="flex gap-1.5 rounded-xl bg-slate-100 p-1">
+            <button
+              type="button"
+              onClick={() => handleModeChange("dispense")}
+              className={`flex-1 rounded-lg py-2 text-sm font-bold transition-all ${
+                mode === "dispense"
+                  ? "bg-white text-[#007bff] shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
               }`}
-              title="รีเฟรชข้อมูล"
             >
-              <RefreshCw className="h-4 w-4" />
+              จ่ายยาให้ผู้ป่วย
             </button>
-          </div>
-
-          {/* ผู้ใช้ที่ล็อกอินอยู่ + ปุ่มออกจากระบบ (เฉพาะโซนหน้าจ่ายยา ไม่กระทบ session ฝั่ง Admin) */}
-          <div className="flex items-center gap-2 rounded-xl bg-white/70 backdrop-blur-sm border border-white px-3 py-2 self-stretch md:self-auto justify-between md:justify-start shadow-sm">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="p-2 rounded-lg bg-green-50 text-[#198754] shrink-0">
-                <UserCircle2 className="h-5 w-5" />
-              </div>
-              <span className="text-sm font-bold text-slate-700 truncate max-w-[140px]">
-                {profile?.full_name || "เจ้าหน้าที่จ่ายยา"}
-              </span>
-            </div>
             <button
-              onClick={handleLogout}
-              className="flex items-center gap-1.5 rounded-lg bg-red-50 px-3 py-2 text-sm font-bold text-red-600 border border-red-100 hover:bg-red-100 active:scale-95 transition-all shrink-0"
-              title="ออกจากระบบ"
+              type="button"
+              onClick={() => handleModeChange("replenish")}
+              className={`flex-1 rounded-lg py-2 text-sm font-bold transition-all ${
+                mode === "replenish"
+                  ? "bg-white text-[#007bff] shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
             >
-              <LogOut className="h-4 w-4" />
-              <span className="hidden sm:inline">ออกจากระบบ</span>
+              เติมยาหน่วยงาน
             </button>
           </div>
+        )}
 
-        </div>
-
-
-        {/* ================= ส่วนฟอร์มและประวัติ (Workspace) ================= */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 items-stretch">
-          {/* ฟอร์มจ่ายยา + ปุ่มคืนยา */}
-          <div className="lg:col-span-5 xl:col-span-5 h-full flex flex-col gap-4">
-            <DispenseForm
-              editingRow={editingRow}
-              onCancelEdit={() => setEditingRow(null)}
-              onSaved={() => {
-                setEditingRow(null);
-                setRefreshKey((k) => k + 1);
-              }}
-            />
-
-            {/* ปุ่มคืนยาจากตึก */}
-            <button
-              onClick={() => setShowReturnModal(true)}
-              className="flex items-center justify-center gap-2 w-full rounded-2xl border-2 border-dashed border-orange-300 bg-orange-50 py-4 text-base font-bold text-orange-600 hover:bg-orange-100 hover:border-orange-400 active:scale-[0.98] transition-all"
-            >
-              <Undo2 className="h-5 w-5" />
-              คืนยาจากตึก / หน่วยงาน
-            </button>
-          </div>
-
-          {/* ประวัติการจ่ายยา */}
-          <div className="lg:col-span-7 xl:col-span-7 h-full">
-            <DispenseHistory
-              refreshKey={refreshKey}
-              editingId={editingRow?.id}
-              onEditRequest={(row) => setEditingRow(row)}
-            />
-          </div>
-        </div>
-
-      </div>
-
-      {/* ================= ส่วน Footer ดีไซน์ใหม่ สมดุลและเรียบหรูอยู่ตรงกลาง ================= */}
-      <footer className="relative w-full mt-12 py-6">
-        {/* แถบสีบางๆ ด้านบน footer แบบเดียวกับที่ขอบล่างของหัว ให้เข้าธีมเดียวกันทั้งหน้า */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-[#007bff] via-[#4a9bd1] to-[#198754]" />
-        <div className="mx-auto max-w-[1600px] px-4 flex flex-col items-center justify-center gap-3 text-center">
-          
-          {/* บรรทัดบน: กลุ่มงานและระบบ */}
-          <div className="flex items-center gap-2">
-            <div className="p-1 rounded-md bg-white shadow-xs border border-slate-200 text-blue-600">
-              <Pill className="h-4 w-4" />
-            </div>
-            <span className="font-bold text-slate-700 text-sm">
-              กลุ่มงานเภสัชกรรม รพ.กุมภวาปี
+        {/* แถบแจ้งว่ากำลังแก้ไขรายการเดิม (แทนที่ popup) */}
+        {isEditMode && (
+          <div className="flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            <span>
+              ✏️ กำลังแก้ไขรายการ: <strong>{formData.searchDrug || "-"}</strong>
+              {formData.strength ? ` (${formData.strength})` : ""}
             </span>
-            
+            <button
+              type="button"
+              onClick={handleCancelEdit}
+              className="flex items-center gap-1 font-bold text-amber-700 hover:text-amber-900"
+            >
+              <X className="h-3.5 w-3.5" /> ยกเลิก
+            </button>
           </div>
+        )}
 
-          {/* บรรทัดล่าง: เครดิตผู้พัฒนา และสถานะฐานข้อมูล */}
-          <div className="flex items-center justify-center gap-3 text-sm text-slate-400 flex-wrap">
-            <span className="text-slate-500 font-semibold">© 2026 ระบบบันทึกจ่ายยา Antidote</span>
-            <span className="h-3.5 w-px bg-slate-300">|</span>
-            <span className="text-slate-500 font-semibold">พัฒนาโดย สายัญ ธุนันทา</span>
-            <span className="h-3.5 w-px bg-slate-300"></span>
+        {/* หน่วยงานที่จ่าย ต้องเลือกก่อน เพราะสต็อก/ล็อตที่ค้นหาได้ผูกกับหน่วยงานนี้ */}
+        <div>
+          <label className="mb-1 block text-sm font-bold text-[#2f8fdc]">
+            {mode === "replenish" ? "หน่วยงานที่เติม (ต้นทาง)" : "หน่วยงานที่จ่าย"} *
+          </label>
+          <select
+            value={departmentId}
+            onChange={handleDepartmentChange}
+            required
             
-            
-          </div>
-
+            className="w-full rounded-lg border border-[#2f8fdc] px-3 py-2 text-sm h-11 focus:outline-none focus:ring-2 focus:ring-[#2f8fdc] disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed"
+          >
+            <option value="">เลือกหน่วยงาน</option>
+            {(mode === "replenish" ? sourceDepartments : departments).map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}{d.is_home ? " (หน่วยงานหลัก)" : ""}
+              </option>
+            ))}
+          </select>
+          {mode === "dispense" && !departmentId && (
+            <p className="mt-1 text-[12px] text-red-500">กรุณาเลือกหน่วยงานก่อนค้นหารายการยา</p>
+          )}
         </div>
-      </footer>
 
+        {/* โหมดเติมยาหน่วยงาน: เลือกหน่วยงานปลายทางที่จะรับยา (ทุกหน่วยงาน ยกเว้น AVDC เอง) */}
+        {mode === "replenish" && (
+          <div>
+            <label className="mb-1 block text-sm font-bold text-[#2f8fdc]">หน่วยงานปลายทาง *</label>
+            <select
+              value={destDepartmentId}
+              onChange={(e) => setDestDepartmentId(e.target.value)}
+              required
+              className="w-full rounded-lg border border-[#2f8fdc] px-3 py-2 text-sm h-11 focus:outline-none focus:ring-2 focus:ring-[#2f8fdc]"
+            >
+              <option value="">เลือกหน่วยงาน</option>
+              {departments
+                .filter((d) => String(d.id) !== String(departmentId))
+                .map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+            </select>
+            {!destDepartmentId && (
+              <p className="mt-1 text-[12px] text-red-500">กรุณาเลือกหน่วยงานปลายทางก่อนค้นหารายการยา</p>
+            )}
+          </div>
+        )}
 
-      {/* ================= Modal คืนยาจากตึก ================= */}
-      {showReturnModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="relative w-full max-w-md rounded-2xl bg-white shadow-2xl border border-orange-100">
+        {/* แถวที่ 1: คำนำหน้า, ชื่อ-นามสกุล, HN (เฉพาะโหมดจ่ายยาให้ผู้ป่วยเท่านั้น) */}
+        {mode === "dispense" && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-12">
+          <div className="sm:col-span-3">
+            <label className="block text-sm font-bold text-slate-800 mb-1">คำนำหน้า</label>
+            <select 
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-[#007bff] focus:outline-none focus:ring-2 focus:ring-[#007bff] h-11"
+              value={formData.prefix}
+              onChange={(e) => setFormData({...formData, prefix: e.target.value})}
+            >
+              <option value="">เลือก</option>
+              <option value="นาย">นาย</option>
+              <option value="นาง">นาง</option>
+              <option value="น.ส.">น.ส.</option>
+              <option value="ด.ช.">ด.ช.</option>
+              <option value="ด.ญ.">ด.ญ.</option>
+              <option value="พระ">พระ</option>
+              <option value="Mr.">Mr.</option>
+              <option value="Mrs.">Mrs.</option>
+            </select>
+          </div>
+          <div className="sm:col-span-5">
+            <label className="block text-sm font-bold text-slate-800 mb-1">ชื่อ-นามสกุล ผู้ป่วย</label>
+            <input 
+              type="text" 
+              placeholder="ระบุชื่อผู้ป่วย"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#007bff] focus:outline-none focus:ring-2 focus:ring-[#007bff] h-11"
+              value={formData.patientName}
+              onChange={(e) => setFormData({...formData, patientName: e.target.value})}
+            />
+          </div>
+          <div className="sm:col-span-4">
+            <label className="block text-sm font-bold text-slate-800 mb-1">HN</label>
+            <input 
+              type="text" 
+              placeholder="เลข HN"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#007bff] focus:outline-none focus:ring-2 focus:ring-[#007bff] h-11"
+              value={formData.hn}
+              onChange={(e) => setFormData({...formData, hn: e.target.value})}
+            />
+          </div>
+        </div>
+        )}
 
-            {/* Header */}
-            <div className="flex items-center justify-between rounded-t-2xl bg-gradient-to-r from-orange-500 to-amber-500 px-5 py-4">
-              <div className="flex items-center gap-2">
-                <Undo2 className="h-5 w-5 text-white" />
-                <h2 className="text-lg font-extrabold text-white">คืนยาจากตึก / หน่วยงาน</h2>
-              </div>
-              <button
-                onClick={() => setShowReturnModal(false)}
-                className="rounded-lg p-1 text-white/80 hover:bg-white/20 transition-colors"
+        {/* แถวที่ 2: วันที่จ่าย, เวลา */}
+        <div className="grid grid-cols-2 gap-3 sm:gap-4">
+          <div>
+            <label className="block text-sm font-bold text-slate-800 mb-1">วันที่จ่าย</label>
+            <input 
+              type="date" 
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#007bff] focus:outline-none focus:ring-2 focus:ring-[#007bff] h-11"
+              value={formData.dispenseDate}
+              onChange={(e) => setFormData({...formData, dispenseDate: e.target.value})}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-bold text-slate-800 mb-1">เวลา</label>
+            <input 
+              type="time" 
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#007bff] focus:outline-none focus:ring-2 focus:ring-[#007bff] h-11"
+              value={formData.dispenseTime}
+              onChange={(e) => setFormData({...formData, dispenseTime: e.target.value})}
+            />
+          </div>
+        </div>
+
+        {/* แถวที่ 3: เจ้าหน้าที่ผู้จ่าย (ค้นหาแบบ autocomplete จากตาราง staff) */}
+        <div className="relative">
+          <label className="block text-sm font-bold text-slate-800 mb-1">เภสัชกร/เจ้าหน้าที่ผู้จ่าย</label>
+          <input 
+            type="text" 
+            placeholder="พิมพ์หรือใช้ลูกศร ↑↓ เพื่อเลือกชื่อผู้บันทึก"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#007bff] focus:outline-none focus:ring-2 focus:ring-[#007bff] h-11"
+            value={formData.staff}
+            onChange={handleSearchStaffChange}
+            onKeyDown={handleStaffKeyDown}
+            onFocus={() => { if (formData.staff) setShowStaffDropdown(true); }}
+            onBlur={() => setTimeout(() => setShowStaffDropdown(false), 150)}
+          />
+
+          {showStaffDropdown && filteredStaff.length > 0 && (
+            <div className="absolute z-10 w-full mt-1 max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-md">
+              {filteredStaff.map((s, idx) => (
+                <div
+                  key={s.id}
+                  onMouseDown={() => handleSelectStaff(s)}
+                  onMouseEnter={() => setStaffHighlightIndex(idx)}
+                  className={`px-3 py-2 cursor-pointer text-sm border-b border-slate-50 ${
+                    idx === staffHighlightIndex ? "bg-blue-50" : "hover:bg-blue-50"
+                  }`}
+                >
+                  <strong className="text-slate-800">{s.name}</strong>
+                  {s.role && (
+                    <span className="text-[12px] text-slate-500 ml-2">({s.role})</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* แถวที่ 4: ค้นหายา (จาก v_dispensable_lots) */}
+        <div className="relative">
+          <label className="block text-sm font-bold text-slate-800 mb-1">
+            ค้นหารายการยา <span className="text-red-500 font-normal">*เรียงตามหมดอายุก่อน</span>
+          </label>
+          <input 
+            type="text" 
+            placeholder={
+              mode === "replenish" && !destDepartmentId
+                ? "กรุณาเลือกหน่วยงานปลายทางก่อน"
+                : departmentId ? "พิมพ์ชื่อยา หรือใช้ลูกศร ↑↓ เพื่อเลือก..." : "กรุณาเลือกหน่วยงานก่อน"
+            }
+            disabled={!departmentId || (mode === "replenish" && !destDepartmentId)}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#007bff] focus:outline-none focus:ring-2 focus:ring-[#007bff] h-11 disabled:bg-slate-50 disabled:cursor-not-allowed"
+            value={formData.searchDrug}
+            onChange={handleSearchDrugChange}
+            onKeyDown={handleDrugKeyDown}
+            onFocus={() => { if (formData.searchDrug) setShowDropdown(true); }}
+            onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
+          />
+          {drugFetchError && (
+            <p className="mt-1 text-[12px] text-amber-600">{drugFetchError}</p>
+          )}
+          {isLotDataIncomplete && (
+            <p className="mt-1 text-[12px] text-red-500 font-medium">
+              ⚠ ล็อตนี้ยังไม่มีเลข Lot / วันหมดอายุที่สมบูรณ์ในระบบ กรุณาไปแก้ไขข้อมูลที่หน้า "คลังยา" ก่อนจ่ายยาจริง
+            </p>
+          )}
+
+          {showDropdown && filteredDrugs.length > 0 && (
+            <div className="absolute z-10 w-full mt-1 max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-md">
+              {filteredDrugs.map((drug, idx) => (
+                <div
+                  key={drug.lot_row_id}
+                  onMouseDown={() => handleSelectDrug(drug)}
+                  onMouseEnter={() => setDrugHighlightIndex(idx)}
+                  className={`px-3 py-2 cursor-pointer text-sm border-b border-slate-50 leading-relaxed ${
+                    idx === drugHighlightIndex ? "bg-blue-50" : "hover:bg-blue-50"
+                  }`}
+                >
+                  <span className="text-emerald-600 font-bold">[คงเหลือ: {drug.quantity} {unitFromForm(drug.form) || drug.unit || "หน่วย"}]</span>
+                  {" "}
+                  <span className="text-slate-800">{drug.drug_name}</span>
+                  {drug.strength && <span className="text-slate-500"> ({drug.strength})</span>}
+                  {" | "}
+                  <span className="text-slate-600">Lot: {drug.lot}</span>
+                  {" | "}
+                  <span className="text-red-500">Exp: {drug.exp_date}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* แถวที่ 5: ความแรง, รูปแบบยา */}
+        <div className="grid grid-cols-2 gap-3 sm:gap-4">
+          <div>
+            <label className="block text-sm font-bold text-slate-800 mb-1">ความแรง</label>
+            <input 
+              type="text" 
+              readOnly
+              className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-500 cursor-not-allowed outline-none h-11"
+              value={formData.strength}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-bold text-slate-800 mb-1">รูปแบบยา</label>
+            <input 
+              type="text" 
+              readOnly
+              className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-500 cursor-not-allowed outline-none h-11"
+              value={formData.drugType}
+            />
+          </div>
+        </div>
+
+        {/* แถวที่ 6: Lot Number และ จำนวนที่จ่าย */}
+        <div className="grid grid-cols-2 gap-3 sm:gap-4">
+          <div>
+            <label className="block text-sm font-bold text-slate-800 mb-1">Lot Number</label>
+            <input 
+              type="text" 
+              readOnly
+              className={`w-full rounded-lg border px-3 py-2 text-sm cursor-not-allowed outline-none h-11 ${
+                isLotDataIncomplete
+                  ? "border-red-300 bg-red-50 text-red-500"
+                  : "border-slate-200 bg-slate-50/50 text-slate-500"
+              }`}
+              value={formData.lotNumber}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-bold text-[#007bff] mb-1">
+              {mode === "replenish" ? "จำนวนที่เติม" : "จำนวนที่จ่าย"}{formData.unit ? ` (${formData.unit})` : ""}
+            </label>
+            <input 
+              type="number" 
+              required
+              min="1"
+              max={formData.maxQuantity || undefined}
+              className="w-full rounded-lg border-2 border-[#007bff] px-3 py-2 text-base font-bold text-[#007bff] focus:outline-none h-11"
+              value={formData.quantity}
+              onChange={(e) => setFormData({...formData, quantity: e.target.value})}
+            />
+          </div>
+        </div>
+
+        {/* แถวที่ 7: วันผลิต, วันหมดอายุ */}
+        <div className="grid grid-cols-2 gap-3 sm:gap-4">
+          <div>
+            <label className="block text-sm font-bold text-slate-800 mb-1">วันผลิต</label>
+            <input 
+              type="text" 
+              placeholder="วว/ดด/ปปปป"
+              readOnly
+              className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-400 cursor-not-allowed outline-none h-11"
+              value={formData.mfgDate}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-bold text-slate-800 mb-1">วันหมดอายุ</label>
+            <input 
+              type="text" 
+              placeholder="วว/ดด/ปปปป"
+              readOnly
+              className={`w-full rounded-lg border px-3 py-2 text-sm cursor-not-allowed outline-none h-11 ${
+                isLotDataIncomplete
+                  ? "border-red-300 bg-red-50 text-red-500"
+                  : "border-slate-200 bg-slate-50/50 text-slate-400"
+              }`}
+              value={formData.expDate}
+            />
+          </div>
+        </div>
+
+        {/* ปุ่ม "เพิ่มลงตะกร้า" — เฉพาะโหมดจ่ายยาปกติ (ไม่ใช้ตอนแก้ไขรายการเดิม หรือเติมยาหน่วยงาน) */}
+        {mode === "dispense" && !isEditMode && (
+          <button
+            type="button"
+            onClick={addToCart}
+            disabled={!formData.drugId || !formData.quantity}
+            className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#007bff]/50 py-2.5 text-sm font-bold text-[#007bff] hover:bg-blue-50 active:scale-[0.99] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Plus className="h-4 w-4" /> เพิ่มรายการยานี้ลงตะกร้า
+          </button>
+        )}
+
+        {/* ตะกร้ายาที่รอบันทึก — แสดงเฉพาะเมื่อมีรายการอยู่ในตะกร้า */}
+        {mode === "dispense" && !isEditMode && cart.length > 0 && (
+          <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3 space-y-2">
+            <div className="flex items-center gap-1.5 text-sm font-bold text-[#0056b3]">
+              <ShoppingCart className="h-4 w-4" /> ตะกร้ายา ({cart.length} รายการ)
+            </div>
+            {cart.map((item) => (
+              <div
+                key={item.lotRowId}
+                className="flex items-center justify-between gap-2 rounded-lg bg-white border border-blue-100 px-3 py-2 text-sm"
               >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            {/* Form */}
-            <div className="p-5 space-y-4">
-
-              {/* หน่วยงานที่คืน */}
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5">หน่วยงานที่คืนยา *</label>
-                <select
-                  value={returnForm.ward}
-                  onChange={(e) => setReturnForm((f) => ({ ...f, ward: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
-                >
-                  <option value="">-- เลือกหน่วยงาน --</option>
-                  {departments
-                    .filter((d) => !d.name.includes("คลังยา"))
-                    .map((d) => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
-                    ))}
-                </select>
-              </div>
-
-              {/* ชื่อยา */}
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5">ชื่อยา *</label>
-                <input
-                  type="text"
-                  placeholder="พิมพ์ชื่อยา..."
-                  value={returnForm.drugName}
-                  onChange={(e) => setReturnForm((f) => ({ ...f, drugName: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700 placeholder-slate-300 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
-                />
-              </div>
-
-              {/* Lot No. */}
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5">Lot Number *</label>
-                <input
-                  type="text"
-                  placeholder="เช่น LK196049"
-                  value={returnForm.lot}
-                  onChange={(e) => setReturnForm((f) => ({ ...f, lot: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700 placeholder-slate-300 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
-                />
-              </div>
-
-              {/* จำนวน */}
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5">จำนวนที่คืน *</label>
-                <input
-                  type="number"
-                  min="1"
-                  placeholder="0"
-                  value={returnForm.qty}
-                  onChange={(e) => setReturnForm((f) => ({ ...f, qty: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-700 placeholder-slate-300 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
-                />
-              </div>
-
-              {/* ผู้บันทึก */}
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5">ผู้บันทึก</label>
-                <input
-                  type="text"
-                  placeholder={profile?.full_name || "ชื่อผู้บันทึก"}
-                  value={returnForm.staffName}
-                  onChange={(e) => setReturnForm((f) => ({ ...f, staffName: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700 placeholder-slate-300 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
-                />
-              </div>
-
-              {/* หมายเหตุ */}
-              <p className="text-xs text-slate-400">
-                * ยาจะถูกบันทึกเข้า <span className="font-bold text-orange-500">คลังยา</span> พร้อม reason: <code className="bg-slate-100 px-1 rounded">return_from_ward</code>
-              </p>
-
-              {/* ปุ่ม */}
-              <div className="flex gap-3 pt-1">
+                <div className="min-w-0">
+                  <span className="font-bold text-slate-800">{item.drugName}</span>
+                  {item.strength && <span className="text-slate-500"> ({item.strength})</span>}
+                  <div className="text-[12px] text-slate-500">
+                    Lot: {item.lotNumber || "-"} | จ่าย: <span className="font-bold text-[#007bff]">{item.quantity}</span> {item.unit || ""}
+                  </div>
+                </div>
                 <button
-                  onClick={() => setShowReturnModal(false)}
-                  className="flex-1 rounded-xl border border-slate-200 bg-slate-50 py-3 text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+                  type="button"
+                  onClick={() => editCartItem(item)}
+                  className="shrink-0 rounded-lg p-1.5 text-amber-500 hover:bg-amber-50 active:scale-95 transition-all"
+                  title="แก้ไขจำนวน/รายการนี้"
                 >
-                  ยกเลิก
+                  <Pencil className="h-4 w-4" />
                 </button>
                 <button
-                  onClick={handleReturnSubmit}
-                  disabled={returnLoading}
-                  className="flex-1 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 py-3 text-sm font-extrabold text-white shadow-md hover:from-orange-600 hover:to-amber-600 active:scale-[0.98] transition-all disabled:opacity-60"
+                  type="button"
+                  onClick={() => removeFromCart(item.lotRowId)}
+                  className="shrink-0 rounded-lg p-1.5 text-red-500 hover:bg-red-50 active:scale-95 transition-all"
+                  title="ลบออกจากตะกร้า"
                 >
-                  {returnLoading ? "กำลังบันทึก..." : "บันทึกคืนยา"}
+                  <Trash2 className="h-4 w-4" />
                 </button>
               </div>
-
-            </div>
+            ))}
           </div>
-        </div>
-      )}
+        )}
+
+        {/* ปุ่มบันทึกข้อมูลและตัดสต็อก */}
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full mt-4 flex items-center justify-center gap-2 rounded-xl bg-[#007bff] py-3 text-base font-bold text-white shadow-sm hover:bg-[#0069d9] active:scale-[0.99] transition-all disabled:opacity-50 h-12"
+        >
+          <Save className="h-5 w-5" />
+          {loading
+            ? "กำลังบันทึก..."
+            : mode === "replenish"
+            ? "บันทึกการเติมยาหน่วยงาน"
+            : cart.length > 0
+            ? `บันทึกข้อมูลและตัดสต็อก (${cart.length}${formData.drugId && formData.quantity ? " + 1" : ""} รายการ)`
+            : "บันทึกข้อมูลและตัดสต็อก"}
+        </button>
+
+      </form>
+
+      {/* ไอคอนข้อมูล (i) ที่มุมซ้ายล่าง */}
+      <div className="absolute left-2.5 bottom-2.5 text-slate-400 hover:text-slate-600 cursor-pointer">
+        <Info className="h-4 w-4" />
+      </div>
 
     </div>
   );
