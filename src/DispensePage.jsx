@@ -7,6 +7,8 @@ import avdcLogo from "./assets/avdc-logo.png";
 import { useAuth } from "./AuthContext";
 import { supabase } from "./supabaseClient";
 
+
+
 export default function DispensePage() {
   const { profile, signOut } = useAuth();
   const [refreshKey, setRefreshKey] = useState(0);
