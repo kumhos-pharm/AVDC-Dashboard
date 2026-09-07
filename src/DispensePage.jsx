@@ -252,16 +252,8 @@ export default function DispensePage() {
                 setEditingRow(null);
                 setRefreshKey((k) => k + 1);
               }}
+              onReturnClick={() => setShowReturnModal(true)}
             />
-
-            {/* ปุ่มคืนยาจากตึก */}
-            <button
-              onClick={() => setShowReturnModal(true)}
-              className="flex items-center justify-center gap-2 w-full rounded-2xl border-2 border-dashed border-orange-300 bg-orange-50 py-4 text-base font-bold text-orange-600 hover:bg-orange-100 hover:border-orange-400 active:scale-[0.98] transition-all"
-            >
-              <Undo2 className="h-5 w-5" />
-              คืนยาจากตึก / หน่วยงาน
-            </button>
           </div>
 
           {/* ประวัติการจ่ายยา */}
