@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
 import DispenseForm from "./DispenseForm";
 import DispenseHistory from "./DispenseHistory";
-import { RefreshCw, Calendar, Pill, Database, LogOut, UserCircle2 } from "lucide-react";
+import { RefreshCw, Calendar, Pill, Database, LogOut, UserCircle2, Undo2, X } from "lucide-react";
 import Swal from "sweetalert2";
 import avdcLogo from "./assets/avdc-logo.png";
 import { useAuth } from "./AuthContext";
+import { supabase } from "./supabaseClient";
 
 export default function DispensePage() {
   const { profile, signOut } = useAuth();
@@ -14,6 +15,84 @@ export default function DispensePage() {
 
   // แถวจากประวัติที่กำลังถูกแก้ไขอยู่ (null = ไม่ได้แก้ไข, ฟอร์มอยู่ในโหมดจ่ายยาใหม่ตามปกติ)
   const [editingRow, setEditingRow] = useState(null);
+
+  // Modal คืนยาจากตึก
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [returnForm, setReturnForm] = useState({
+    drugName: "",
+    lot: "",
+    qty: "",
+    ward: "",
+    staffName: "",
+  });
+  const [returnLoading, setReturnLoading] = useState(false);
+  const [departments, setDepartments] = useState([]);
+
+  // โหลดรายชื่อหน่วยงาน (ยกเว้นคลังยา) เพื่อให้เลือกว่าคืนมาจากตึกไหน
+  useEffect(() => {
+    supabase
+      .from("departments")
+      .select("id, name")
+      .order("name")
+      .then(({ data }) => setDepartments(data ?? []));
+  }, []);
+
+  const handleReturnSubmit = async () => {
+    const { drugName, lot, qty, ward, staffName } = returnForm;
+    if (!drugName.trim() || !lot.trim() || !qty || !ward) {
+      Swal.fire({ icon: "warning", title: "กรุณากรอกข้อมูลให้ครบ", timer: 1500, showConfirmButton: false });
+      return;
+    }
+    if (Number(qty) <= 0) {
+      Swal.fire({ icon: "warning", title: "จำนวนต้องมากกว่า 0", timer: 1500, showConfirmButton: false });
+      return;
+    }
+
+    setReturnLoading(true);
+
+    // ค้นหา drug_id จากชื่อยา
+    const { data: drugData } = await supabase
+      .from("drugs")
+      .select("id")
+      .ilike("name", drugName.trim())
+      .maybeSingle();
+
+    if (!drugData) {
+      setReturnLoading(false);
+      Swal.fire({ icon: "error", title: "ไม่พบยาในระบบ", text: `ไม่พบ "${drugName}" กรุณาตรวจสอบชื่อยา` });
+      return;
+    }
+
+    // ค้นหา department_id ของคลังยา (ปลายทาง)
+    const { data: warehouseDept } = await supabase
+      .from("departments")
+      .select("id")
+      .ilike("name", "คลังยา")
+      .maybeSingle();
+
+    // บันทึก stock_movements คืนยาเข้าคลัง
+    const { error } = await supabase.from("stock_movements").insert({
+      drug_id: drugData.id,
+      department_id: warehouseDept?.id ?? null,
+      lot: lot.trim(),
+      change_qty: Number(qty),
+      reason: "return_from_ward",
+      note: `คืนจาก: ${departments.find((d) => d.id === Number(ward))?.name ?? ward}`,
+      staff_name: staffName.trim() || profile?.full_name || null,
+    });
+
+    setReturnLoading(false);
+
+    if (error) {
+      Swal.fire({ icon: "error", title: "บันทึกไม่สำเร็จ", text: error.message });
+      return;
+    }
+
+    Swal.fire({ icon: "success", title: "บันทึกคืนยาสำเร็จ", timer: 1500, showConfirmButton: false });
+    setShowReturnModal(false);
+    setReturnForm({ drugName: "", lot: "", qty: "", ward: "", staffName: "" });
+    setRefreshKey((k) => k + 1);
+  };
 
   const handleLogout = async () => {
     const result = await Swal.fire({
@@ -164,8 +243,8 @@ export default function DispensePage() {
 
         {/* ================= ส่วนฟอร์มและประวัติ (Workspace) ================= */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 items-stretch">
-          {/* ฟอร์มจ่ายยา */}
-          <div className="lg:col-span-5 xl:col-span-5 h-full">
+          {/* ฟอร์มจ่ายยา + ปุ่มคืนยา */}
+          <div className="lg:col-span-5 xl:col-span-5 h-full flex flex-col gap-4">
             <DispenseForm
               editingRow={editingRow}
               onCancelEdit={() => setEditingRow(null)}
@@ -174,6 +253,15 @@ export default function DispensePage() {
                 setRefreshKey((k) => k + 1);
               }}
             />
+
+            {/* ปุ่มคืนยาจากตึก */}
+            <button
+              onClick={() => setShowReturnModal(true)}
+              className="flex items-center justify-center gap-2 w-full rounded-2xl border-2 border-dashed border-orange-300 bg-orange-50 py-4 text-base font-bold text-orange-600 hover:bg-orange-100 hover:border-orange-400 active:scale-[0.98] transition-all"
+            >
+              <Undo2 className="h-5 w-5" />
+              คืนยาจากตึก / หน่วยงาน
+            </button>
           </div>
 
           {/* ประวัติการจ่ายยา */}
@@ -217,6 +305,123 @@ export default function DispensePage() {
 
         </div>
       </footer>
+
+    </div>
+
+      {/* ================= Modal คืนยาจากตึก ================= */}
+      {showReturnModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="relative w-full max-w-md rounded-2xl bg-white shadow-2xl border border-orange-100">
+
+            {/* Header */}
+            <div className="flex items-center justify-between rounded-t-2xl bg-gradient-to-r from-orange-500 to-amber-500 px-5 py-4">
+              <div className="flex items-center gap-2">
+                <Undo2 className="h-5 w-5 text-white" />
+                <h2 className="text-lg font-extrabold text-white">คืนยาจากตึก / หน่วยงาน</h2>
+              </div>
+              <button
+                onClick={() => setShowReturnModal(false)}
+                className="rounded-lg p-1 text-white/80 hover:bg-white/20 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Form */}
+            <div className="p-5 space-y-4">
+
+              {/* หน่วยงานที่คืน */}
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5">หน่วยงานที่คืนยา *</label>
+                <select
+                  value={returnForm.ward}
+                  onChange={(e) => setReturnForm((f) => ({ ...f, ward: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                >
+                  <option value="">-- เลือกหน่วยงาน --</option>
+                  {departments
+                    .filter((d) => !d.name.includes("คลังยา"))
+                    .map((d) => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                </select>
+              </div>
+
+              {/* ชื่อยา */}
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5">ชื่อยา *</label>
+                <input
+                  type="text"
+                  placeholder="พิมพ์ชื่อยา..."
+                  value={returnForm.drugName}
+                  onChange={(e) => setReturnForm((f) => ({ ...f, drugName: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700 placeholder-slate-300 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                />
+              </div>
+
+              {/* Lot No. */}
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5">Lot Number *</label>
+                <input
+                  type="text"
+                  placeholder="เช่น LK196049"
+                  value={returnForm.lot}
+                  onChange={(e) => setReturnForm((f) => ({ ...f, lot: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700 placeholder-slate-300 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                />
+              </div>
+
+              {/* จำนวน */}
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5">จำนวนที่คืน *</label>
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="0"
+                  value={returnForm.qty}
+                  onChange={(e) => setReturnForm((f) => ({ ...f, qty: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-700 placeholder-slate-300 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                />
+              </div>
+
+              {/* ผู้บันทึก */}
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5">ผู้บันทึก</label>
+                <input
+                  type="text"
+                  placeholder={profile?.full_name || "ชื่อผู้บันทึก"}
+                  value={returnForm.staffName}
+                  onChange={(e) => setReturnForm((f) => ({ ...f, staffName: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700 placeholder-slate-300 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                />
+              </div>
+
+              {/* หมายเหตุ */}
+              <p className="text-xs text-slate-400">
+                * ยาจะถูกบันทึกเข้า <span className="font-bold text-orange-500">คลังยา</span> พร้อม reason: <code className="bg-slate-100 px-1 rounded">return_from_ward</code>
+              </p>
+
+              {/* ปุ่ม */}
+              <div className="flex gap-3 pt-1">
+                <button
+                  onClick={() => setShowReturnModal(false)}
+                  className="flex-1 rounded-xl border border-slate-200 bg-slate-50 py-3 text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  onClick={handleReturnSubmit}
+                  disabled={returnLoading}
+                  className="flex-1 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 py-3 text-sm font-extrabold text-white shadow-md hover:from-orange-600 hover:to-amber-600 active:scale-[0.98] transition-all disabled:opacity-60"
+                >
+                  {returnLoading ? "กำลังบันทึก..." : "บันทึกคืนยา"}
+                </button>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
