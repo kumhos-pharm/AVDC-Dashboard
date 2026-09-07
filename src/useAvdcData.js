@@ -80,6 +80,12 @@ export function useAvdcData() {
       byDept: byDrugMap[name],
     }));
 
+    // ซ่อนยาที่ quantity รวมทุกหน่วยงาน = 0 (ยาที่ถูกลบออกหรือทดสอบแล้ว)
+    // ป้องกันไม่ให้โชว์ในแดชบอร์ดและรายการยา
+    const pivotedFiltered = pivoted.filter((drug) =>
+      Object.values(drug.byDept).some((cell) => cell && (cell.quantity ?? 0) > 0)
+    );
+
     // ถ้าหน่วยงานไหนไม่ได้ตั้ง Min/Max ของยาตัวนั้นไว้เอง ให้ใช้ค่า Min/Max ที่ตั้งไว้ที่ "คลังยา"
     // (ค่ากลางของยาตัวนั้น) เป็นค่า default แทน ไม่ต้องให้แต่ละหน่วยงานตั้งซ้ำทุกที่
     // ทุกหน่วยงาน รวมถึง "ศูนย์ AVDC (Phar-OPD)" (หน่วยงาน home) ใช้กติกาเดียวกัน:
@@ -87,7 +93,7 @@ export function useAvdcData() {
     // ถ้ายังไม่เคยตั้งไว้ (เป็น null) ค่อย fallback มาใช้ค่ากลางของคลังยาแทน
     const WAREHOUSE_DEPT_NAME = "คลังยา";
     const homeDeptName = deptRows.find((d) => d.is_home)?.name;
-    pivoted.forEach((drug) => {
+    pivotedFiltered.forEach((drug) => {
       const warehouseCell = drug.byDept[WAREHOUSE_DEPT_NAME];
       if (!warehouseCell) return;
 
@@ -105,7 +111,7 @@ export function useAvdcData() {
 
     // ถ้ายาตัวไหนใน cell ใดไม่มีคงเหลือ (quantity เป็น 0 หรือ null) ให้ล้าง min/max ออก
     // เพื่อไม่ให้แดชบอร์ดแสดงค่า Min/Max ที่ค้างอยู่สำหรับยาที่ไม่มีสต็อกจริง
-    pivoted.forEach((drug) => {
+    pivotedFiltered.forEach((drug) => {
       Object.values(drug.byDept).forEach((cell) => {
         if (!cell) return;
         if (!cell.quantity || cell.quantity <= 0) {
@@ -158,7 +164,7 @@ export function useAvdcData() {
     );
 
     setDepartments(deptRows);
-    setDrugRows(pivoted);
+    setDrugRows(pivotedFiltered);
     setTotalDrugCount((drugsRes.data ?? []).length);
     setTotalQuantity(total);
     setLastUpdated(lastUpdatedRes.data?.last_updated ?? null);
