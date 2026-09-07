@@ -7,8 +7,6 @@ import avdcLogo from "./assets/avdc-logo.png";
 import { useAuth } from "./AuthContext";
 import { supabase } from "./supabaseClient";
 
-
-
 export default function DispensePage() {
   const { profile, signOut } = useAuth();
   const [refreshKey, setRefreshKey] = useState(0);
@@ -17,6 +15,7 @@ export default function DispensePage() {
 
   // แถวจากประวัติที่กำลังถูกแก้ไขอยู่ (null = ไม่ได้แก้ไข, ฟอร์มอยู่ในโหมดจ่ายยาใหม่ตามปกติ)
   const [editingRow, setEditingRow] = useState(null);
+
 
   // Modal คืนยาจากตึก
   const [showReturnModal, setShowReturnModal] = useState(false);
