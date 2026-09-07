@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import DispenseForm from "./DispenseForm";
 import DispenseHistory from "./DispenseHistory";
-import { RefreshCw, Calendar, Pill, Database, LogOut, UserCircle2, Undo2, X } from "lucide-react";
+import { RefreshCw, Calendar, Pill, Database, LogOut, UserCircle2, X } from "lucide-react";
 import Swal from "sweetalert2";
 import avdcLogo from "./assets/avdc-logo.png";
 import { useAuth } from "./AuthContext";
