@@ -34,6 +34,24 @@ export async function updateDrug(id, fields) {
 }
 
 export async function deleteDrug(id) {
+  // ตรวจก่อนว่ายังมีสต็อกค้างอยู่ไหม (quantity != 0) ถ้ามีห้ามลบ
+  const { data: lots } = await supabase
+    .from("drug_lots")
+    .select("id, quantity")
+    .eq("drug_id", id);
+
+  const hasStock = (lots ?? []).some((l) => (l.quantity ?? 0) !== 0);
+  if (hasStock) {
+    return { error: { message: "foreign key", code: "23503" } };
+  }
+
+  // ลบ drug_targets (min/max ของยานี้ในแต่ละหน่วยงาน)
+  await supabase.from("drug_targets").delete().eq("drug_id", id);
+
+  // ลบ drug_lots ที่ยอด = 0 ที่ค้างอยู่
+  await supabase.from("drug_lots").delete().eq("drug_id", id);
+
+  // ลบยาออกจาก drugs
   const { error } = await supabase.from("drugs").delete().eq("id", id);
   return { error };
 }
