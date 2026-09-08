@@ -85,7 +85,7 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
   // โหมดของฟอร์ม: "dispense" = จ่ายยาให้ผู้ป่วย, "replenish" = เติมยาหน่วยงาน, "return" = รับคืนยาจากตึก
   const [mode, setMode] = useState("dispense");
   // state โหมดรับคืนยา
-  const [returnForm, setReturnForm] = useState({ drugName: "", lot: "", qty: "", ward: "", staffName: "" });
+  const [returnForm, setReturnForm] = useState({ drugName: "", lot: "", qty: "", ward: "", dest: "", staffName: "" });
   const [returnLoading, setReturnLoading] = useState(false);
   const [allDrugs, setAllDrugs] = useState([]);
   const [drugSuggestions, setDrugSuggestions] = useState([]);
@@ -135,8 +135,8 @@ const sourceDepartments = departments.filter((d) => d.is_home);
 
   // บันทึกคืนยา
   const handleReturnSubmit = async () => {
-    const { drugName, lot, qty, ward, staffName } = returnForm;
-    if (!drugName.trim() || !lot.trim() || !qty || !ward) {
+    const { drugName, lot, qty, ward, dest, staffName } = returnForm;
+    if (!drugName.trim() || !lot.trim() || !qty || !ward || !dest) {
       Swal.fire({ icon: "warning", title: "กรุณากรอกข้อมูลให้ครบ", timer: 1500, showConfirmButton: false }); return;
     }
     if (Number(qty) <= 0) {
@@ -148,17 +148,16 @@ const sourceDepartments = departments.filter((d) => d.is_home);
       setReturnLoading(false);
       Swal.fire({ icon: "error", title: "ไม่พบยาในระบบ", text: `ไม่พบ "${drugName}"` }); return;
     }
-    const { data: wh } = await supabase.from("departments").select("id").ilike("name", "คลังยา").maybeSingle();
-    const deptName = departments.find((d) => d.id === Number(ward))?.name ?? ward;
+    const wardName = departments.find((d) => d.id === Number(ward))?.name ?? ward;
     const { error } = await supabase.from("stock_movements").insert({
-      drug_id: drugData.id, department_id: wh?.id ?? null, lot: lot.trim(),
+      drug_id: drugData.id, department_id: Number(dest), lot: lot.trim(),
       change_qty: Number(qty), reason: "return_from_ward",
-      note: `คืนจาก: ${deptName}`, staff_name: staffName.trim() || null,
+      note: `คืนจาก: ${wardName}`, staff_name: staffName.trim() || null,
     });
     setReturnLoading(false);
     if (error) { Swal.fire({ icon: "error", title: "บันทึกไม่สำเร็จ", text: error.message }); return; }
     Swal.fire({ icon: "success", title: "บันทึกคืนยาสำเร็จ", timer: 1500, showConfirmButton: false });
-    setReturnForm({ drugName: "", lot: "", qty: "", ward: "", staffName: "" });
+    setReturnForm({ drugName: "", lot: "", qty: "", ward: "", dest: "", staffName: "" });
     if (onSaved) onSaved();
   };
 
@@ -1117,9 +1116,6 @@ const sourceDepartments = departments.filter((d) => d.is_home);
           </div>
         )}
 
-        {/* ซ่อน field จ่ายยาทั้งหมดเมื่ออยู่ใน mode รับคืนยา */}
-        {mode !== "return" && (<>
-
         {/* หน่วยงานที่จ่าย ต้องเลือกก่อน เพราะสต็อก/ล็อตที่ค้นหาได้ผูกกับหน่วยงานนี้ */}
         <div>
           <label className="mb-1 block text-sm font-bold text-[#2f8fdc]">
@@ -1454,13 +1450,23 @@ const sourceDepartments = departments.filter((d) => d.is_home);
           </div>
         )}
 
-        </>)}
-
         {/* โหมดรับคืนยาจากตึก */}
         {mode === "return" && (
           <div className="space-y-3 pt-1">
+            {/* หน่วยงานปลายทาง (รับยาคืน) */}
             <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">หน่วยงานที่คืนยา *</label>
+              <label className="block text-xs font-bold text-slate-500 mb-1">หน่วยงานปลายทาง *</label>
+              <select value={returnForm.dest} onChange={(e) => setReturnForm((f) => ({ ...f, dest: e.target.value }))}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100">
+                <option value="">-- เลือกหน่วยงาน --</option>
+                {departments.filter((d) => d.name === "ศูนย์ AVDC (Phar-OPD)" || d.name === "Phar-IPD").map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </div>
+            {/* หน่วยงานต้นทาง (คืนจากที่ไหน) */}
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1">คืนยาจากหน่วยงาน *</label>
               <select value={returnForm.ward} onChange={(e) => setReturnForm((f) => ({ ...f, ward: e.target.value }))}
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100">
                 <option value="">-- เลือกหน่วยงาน --</option>
@@ -1502,7 +1508,7 @@ const sourceDepartments = departments.filter((d) => d.is_home);
                 onChange={(e) => setReturnForm((f) => ({ ...f, staffName: e.target.value }))}
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700 placeholder-slate-300 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100" />
             </div>
-            <p className="text-xs text-slate-400">* ยาจะบันทึกเข้า <span className="font-bold text-orange-500">คลังยา</span> พร้อม reason: <code className="bg-slate-100 px-1 rounded">return_from_ward</code></p>
+            <p className="text-xs text-slate-400">* ยาจะบันทึกเข้า <span className="font-bold text-orange-500">หน่วยงานปลายทาง</span> ที่เลือก พร้อม reason: <code className="bg-slate-100 px-1 rounded">return_from_ward</code></p>
           </div>
         )}
 
