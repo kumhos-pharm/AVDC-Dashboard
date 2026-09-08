@@ -81,10 +81,10 @@ export function useAvdcData() {
       byDept: byDrugMap[name],
     }));
 
-    // ซ่อนเฉพาะยาที่ไม่มีสต็อกและไม่มี min/max ในทุกหน่วยงานเลย (ยาที่ทดสอบ/ลบออกแล้วจริงๆ)
-    // แต่ยังโชว์ยาที่ quantity = 0 ถ้ายังมี max ตั้งไว้ เพื่อให้เห็นว่ายานั้น "หมด" (0/100)
+    // ซ่อนยาที่ quantity รวมทุกหน่วยงาน = 0 (ยาที่ถูกลบออกหรือทดสอบแล้ว)
+    // ป้องกันไม่ให้โชว์ในแดชบอร์ดและรายการยา
     const pivotedFiltered = pivoted.filter((drug) =>
-      Object.values(drug.byDept).some((cell) => cell && ((cell.quantity ?? 0) > 0 || cell.max != null))
+      Object.values(drug.byDept).some((cell) => cell && (cell.quantity ?? 0) > 0)
     );
 
     // ถ้าหน่วยงานไหนไม่ได้ตั้ง Min/Max ของยาตัวนั้นไว้เอง ให้ใช้ค่า Min/Max ที่ตั้งไว้ที่ "คลังยา"
@@ -110,8 +110,17 @@ export function useAvdcData() {
       });
     });
 
-    // หมายเหตุ: ไม่ล้าง min/max ออกแม้ quantity = 0
-    // เพื่อให้แดชบอร์ดแสดง "0/100" แทนที่จะแสดงขีด "-" เมื่อยาหมด
+    // ถ้ายาตัวไหนใน cell ใดไม่มีคงเหลือ (quantity เป็น 0 หรือ null) ให้ล้าง min/max ออก
+    // เพื่อไม่ให้แดชบอร์ดแสดงค่า Min/Max ที่ค้างอยู่สำหรับยาที่ไม่มีสต็อกจริง
+    pivotedFiltered.forEach((drug) => {
+      Object.values(drug.byDept).forEach((cell) => {
+        if (!cell) return;
+        if (!cell.quantity || cell.quantity <= 0) {
+          cell.min = null;
+          cell.max = null;
+        }
+      });
+    });
 
     const total = gridRows
       .filter((r) => validDrugNames.has(r.drug_name))
