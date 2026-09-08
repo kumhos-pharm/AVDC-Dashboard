@@ -4,7 +4,6 @@ import Swal from "sweetalert2";
 import { supabase } from "./supabaseClient"; // ปรับ path ตามโครงสร้างจริงของคุณ
 import { updateDispense } from "./useDispense";
 
-
 // คืนค่าวันที่และเวลาปัจจุบัน (ตามเวลาเครื่องผู้ใช้) ในรูปแบบที่ input type="date"/"time" ต้องการ
 // ใช้เป็นค่าตั้งต้นของฟอร์ม แทนการฝังวันที่/เวลาตายตัวไว้ในโค้ด
 const getCurrentDateStr = () => {
@@ -1118,6 +1117,9 @@ const sourceDepartments = departments.filter((d) => d.is_home);
           </div>
         )}
 
+        {/* ซ่อน field จ่ายยาทั้งหมดเมื่ออยู่ใน mode รับคืนยา */}
+        {mode !== "return" && (<>
+
         {/* หน่วยงานที่จ่าย ต้องเลือกก่อน เพราะสต็อก/ล็อตที่ค้นหาได้ผูกกับหน่วยงานนี้ */}
         <div>
           <label className="mb-1 block text-sm font-bold text-[#2f8fdc]">
@@ -1451,6 +1453,8 @@ const sourceDepartments = departments.filter((d) => d.is_home);
             ))}
           </div>
         )}
+
+        </>)}
 
         {/* โหมดรับคืนยาจากตึก */}
         {mode === "return" && (
