@@ -1116,6 +1116,9 @@ const sourceDepartments = departments.filter((d) => d.is_home);
           </div>
         )}
 
+        {/* ซ่อน field จ่ายยาทั้งหมดเมื่ออยู่ใน mode รับคืนยา */}
+        {mode !== "return" && (<>
+
         {/* หน่วยงานที่จ่าย ต้องเลือกก่อน เพราะสต็อก/ล็อตที่ค้นหาได้ผูกกับหน่วยงานนี้ */}
         <div>
           <label className="mb-1 block text-sm font-bold text-[#2f8fdc]">
@@ -1449,6 +1452,8 @@ const sourceDepartments = departments.filter((d) => d.is_home);
             ))}
           </div>
         )}
+
+        </>)}
 
         {/* โหมดรับคืนยาจากตึก */}
         {mode === "return" && (
