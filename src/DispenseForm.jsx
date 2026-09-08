@@ -4,6 +4,7 @@ import Swal from "sweetalert2";
 import { supabase } from "./supabaseClient"; // ปรับ path ตามโครงสร้างจริงของคุณ
 import { updateDispense } from "./useDispense";
 
+
 // คืนค่าวันที่และเวลาปัจจุบัน (ตามเวลาเครื่องผู้ใช้) ในรูปแบบที่ input type="date"/"time" ต้องการ
 // ใช้เป็นค่าตั้งต้นของฟอร์ม แทนการฝังวันที่/เวลาตายตัวไว้ในโค้ด
 const getCurrentDateStr = () => {
@@ -85,11 +86,13 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
   // โหมดของฟอร์ม: "dispense" = จ่ายยาให้ผู้ป่วย, "replenish" = เติมยาหน่วยงาน, "return" = รับคืนยาจากตึก
   const [mode, setMode] = useState("dispense");
   // state โหมดรับคืนยา
-  const [returnForm, setReturnForm] = useState({ drugName: "", lot: "", qty: "", ward: "", dest: "", staffName: "" });
+  const [returnForm, setReturnForm] = useState({ drugName: "", lot: "", qty: "", ward: "", dest: "", expDate: "", staffName: "" });
   const [returnLoading, setReturnLoading] = useState(false);
   const [allDrugs, setAllDrugs] = useState([]);
   const [drugSuggestions, setDrugSuggestions] = useState([]);
   const [showDrugSug, setShowDrugSug] = useState(false);
+  const [returnStaffSuggestions, setReturnStaffSuggestions] = useState([]);
+  const [showReturnStaffSug, setShowReturnStaffSug] = useState(false);
   const [destDepartmentId, setDestDepartmentId] = useState("");
 
   // หน่วยงานหลัก (ศูนย์ AVDC / Phar-OPD) คือต้นทางเดียวที่เติมยาให้หน่วยงานอื่นได้
@@ -119,6 +122,19 @@ const sourceDepartments = departments.filter((d) => d.is_home);
     fetchStaff();
     supabase.from("drugs").select("id,name").order("name").then(({ data }) => setAllDrugs(data ?? []));
   }, []);
+
+  // autocomplete เจ้าหน้าที่สำหรับโหมด return
+  const handleReturnStaffSearch = (v) => {
+    setReturnForm((f) => ({ ...f, staffName: v }));
+    if (!v.trim()) { setReturnStaffSuggestions([]); setShowReturnStaffSug(false); return; }
+    const t = v.trim().toLowerCase();
+    const m = staffList.filter((s) => s.name.toLowerCase().includes(t)).slice(0, 8);
+    setReturnStaffSuggestions(m); setShowReturnStaffSug(m.length > 0);
+  };
+  const handleReturnStaffSelect = (s) => {
+    setReturnForm((f) => ({ ...f, staffName: s.name }));
+    setShowReturnStaffSug(false);
+  };
 
   // autocomplete ชื่อยาสำหรับโหมด return
   const handleReturnDrugSearch = (v) => {
@@ -152,12 +168,13 @@ const sourceDepartments = departments.filter((d) => d.is_home);
     const { error } = await supabase.from("stock_movements").insert({
       drug_id: drugData.id, department_id: Number(dest), lot: lot.trim(),
       change_qty: Number(qty), reason: "return_from_ward",
+      exp_date: returnForm.expDate || null,
       note: `คืนจาก: ${wardName}`, staff_name: staffName.trim() || null,
     });
     setReturnLoading(false);
     if (error) { Swal.fire({ icon: "error", title: "บันทึกไม่สำเร็จ", text: error.message }); return; }
     Swal.fire({ icon: "success", title: "บันทึกคืนยาสำเร็จ", timer: 1500, showConfirmButton: false });
-    setReturnForm({ drugName: "", lot: "", qty: "", ward: "", dest: "", staffName: "" });
+    setReturnForm({ drugName: "", lot: "", qty: "", ward: "", dest: "", expDate: "", staffName: "" });
     if (onSaved) onSaved();
   };
 
@@ -1508,10 +1525,25 @@ const sourceDepartments = departments.filter((d) => d.is_home);
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-700 placeholder-slate-300 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100" />
             </div>
             <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1">วันหมดอายุ</label>
+              <input type="date" value={returnForm.expDate}
+                onChange={(e) => setReturnForm((f) => ({ ...f, expDate: e.target.value }))}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100" />
+            </div>
+            <div className="relative">
               <label className="block text-xs font-bold text-slate-500 mb-1">ผู้บันทึก</label>
-              <input type="text" placeholder="ชื่อผู้บันทึก" value={returnForm.staffName}
-                onChange={(e) => setReturnForm((f) => ({ ...f, staffName: e.target.value }))}
+              <input type="text" placeholder="พิมพ์ชื่อผู้บันทึก..." value={returnForm.staffName}
+                onChange={(e) => handleReturnStaffSearch(e.target.value)}
+                onBlur={() => setTimeout(() => setShowReturnStaffSug(false), 150)}
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700 placeholder-slate-300 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100" />
+              {showReturnStaffSug && (
+                <ul className="absolute z-50 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-lg max-h-48 overflow-y-auto">
+                  {returnStaffSuggestions.map((s) => (
+                    <li key={s.id} onMouseDown={() => handleReturnStaffSelect(s)}
+                      className="cursor-pointer px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-orange-50 hover:text-orange-600">{s.name}</li>
+                  ))}
+                </ul>
+              )}
             </div>
             <p className="text-xs text-slate-400">* ยาจะบันทึกเข้า <span className="font-bold text-orange-500">หน่วยงานปลายทาง</span> ที่เลือก พร้อม reason: <code className="bg-slate-100 px-1 rounded">return_from_ward</code></p>
           </div>
