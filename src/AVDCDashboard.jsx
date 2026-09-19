@@ -623,6 +623,8 @@ export default function AVDCDashboard() {
                           const isHome = dep.id === homeDept?.id;
                           const st = STATUS[status];
                           const hasStock = cell && cell.quantity > 0;
+                          // ยาถูกกำหนดในหน่วยงานนี้ (มี cell) แต่ quantity = 0 → แสดง 0/max
+                          const isZeroStock = cell && (!cell.quantity || cell.quantity <= 0);
 
                           return (
                             <td key={dep.id} className={`p-1.5 text-center ${isHome ? "bg-[#eaf7ef]/70" : ""}`}>
@@ -637,7 +639,20 @@ export default function AVDCDashboard() {
                                     <span className="text-[11px] font-bold text-blue-600">/{cell.max}</span>
                                   )}
                                 </button>
+                              ) : isZeroStock ? (
+                                // มี cell (ยาถูกกำหนดไว้) แต่ quantity = 0 → แสดง 0/max
+                                <button
+                                  onClick={() => setCellDetail({ drugName: row.name, deptName: dep.name, deptId: dep.id, cell })}
+                                  className="mx-auto flex h-8 w-[64px] items-baseline justify-center gap-[3px] rounded-md leading-none transition hover:ring-2 hover:ring-offset-1 text-slate-400"
+                                  title={`ไม่มีคงเหลือ: ${row.name} (${dep.name})${cell.max != null ? ` — Max ${cell.max}` : ""}`}
+                                >
+                                  <span className="text-[15px] font-extrabold">0</span>
+                                  {cell.max != null && (
+                                    <span className="text-[11px] font-bold text-blue-400">/{cell.max}</span>
+                                  )}
+                                </button>
                               ) : (
+                                // ไม่มี cell เลย (ยาไม่ถูกกำหนดในหน่วยงานนี้) → แสดง -
                                 <div className="mx-auto flex h-8 w-[60px] items-center justify-center rounded-md font-extrabold text-slate-300">
                                   -
                                 </div>
