@@ -14,6 +14,7 @@ export function useDrugsAndDepartments() {
   return { drugs, departments };
 }
 
+
 // ค้นหา "ล็อตยาที่จ่ายได้จริง" ของหน่วยงานที่เลือก เรียงหมดอายุก่อน (FEFO)
 // ต้องมี departmentId ก่อนถึงจะค้นหาได้ เพราะสต็อกแยกเก็บตามหน่วยงาน
 export function useDrugLotSearch(departmentId, query) {
