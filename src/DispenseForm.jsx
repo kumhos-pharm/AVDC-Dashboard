@@ -4,6 +4,7 @@ import Swal from "sweetalert2";
 import { supabase } from "./supabaseClient"; // ปรับ path ตามโครงสร้างจริงของคุณ
 import { updateDispense } from "./useDispense";
 
+
 // คืนค่าวันที่และเวลาปัจจุบัน (ตามเวลาเครื่องผู้ใช้) ในรูปแบบที่ input type="date"/"time" ต้องการ
 // ใช้เป็นค่าตั้งต้นของฟอร์ม แทนการฝังวันที่/เวลาตายตัวไว้ในโค้ด
 const getCurrentDateStr = () => {
@@ -503,14 +504,20 @@ const sourceDepartments = departments.filter((d) => d.is_home);
       alert("กรุณาระบุจำนวนที่จ่ายให้ถูกต้อง");
       return;
     }
-    // ไม่บล็อกเมื่อ qty > maxQuantity อีกต่อไป
-    // เพราะระบบจะ Auto-Split ข้าม Lot (FEFO) ให้อัตโนมัติตอนกดบันทึก
+    if (formData.maxQuantity !== undefined && qty > formData.maxQuantity) {
+      alert(`ยอดสต็อกไม่พอจ่าย (คงเหลือ: ${formData.maxQuantity})`);
+      return;
+    }
 
     setCart((prev) => {
       // กันการเพิ่มล็อตเดียวกันซ้ำ — ถ้ามีอยู่แล้วในตะกร้าให้รวมจำนวนแทนที่จะเพิ่มแถวใหม่
       const existingIdx = prev.findIndex((it) => it.lotRowId === formData.lotRowId);
       if (existingIdx >= 0) {
         const newQty = prev[existingIdx].quantity + qty;
+        if (formData.maxQuantity !== undefined && newQty > formData.maxQuantity) {
+          alert(`ยอดสต็อกไม่พอจ่าย รวมกับที่มีในตะกร้าแล้ว (คงเหลือ: ${formData.maxQuantity})`);
+          return prev;
+        }
         const merged = [...prev];
         merged[existingIdx] = { ...merged[existingIdx], quantity: newQty };
         return merged;
@@ -975,10 +982,14 @@ const sourceDepartments = departments.filter((d) => d.is_home);
       return;
     }
 
-    // ตรวจสอบจำนวนของทุกรายการในตะกร้าอีกครั้งก่อนบันทึกจริง
+    // ตรวจสอบจำนวนของทุกรายการในตะกร้าอีกครั้งก่อนบันทึกจริง (กันสต็อกไม่พอ)
     for (const item of itemsToSubmit) {
       if (!item.quantity || item.quantity <= 0) {
         alert(`จำนวนที่จ่ายของ "${item.drugName}" ต้องมากกว่า 0`);
+        return;
+      }
+      if (item.maxQuantity !== undefined && item.quantity > item.maxQuantity) {
+        alert(`ยอดสต็อกไม่พอจ่าย "${item.drugName}" (คงเหลือ: ${item.maxQuantity})`);
         return;
       }
     }
@@ -986,81 +997,13 @@ const sourceDepartments = departments.filter((d) => d.is_home);
     setLoading(true);
 
     try {
-      // ---------------------------------------------------------------
-      // Multi-Lot Auto-Split (FEFO)
-      // ถ้าจำนวนที่จ่ายของรายการใดเกินสต็อกใน Lot ที่เลือก
-      // ระบบจะดึง Lot ถัดไป (เรียงหมดอายุก่อน) มาเติมให้ครบอัตโนมัติ
-      // ---------------------------------------------------------------
-      const resolvedRows = []; // แถวสำหรับ insert จริง (อาจมากกว่า itemsToSubmit)
+      // ใช้ batch_group_id เชื่อมทุกยาที่จ่ายพร้อมกันในครั้งนี้ (เหมือน transfer_group_id ของโหมดเติมยา)
+      // ถ้าจ่ายรายการเดียวก็ยังใส่ไว้ได้ ไม่มีผลเสีย แต่ฝั่งแสดงผลจะรวมเป็นการ์ดเดียวก็ต่อเมื่อมี > 1 รายการ
+      const batchGroupId = itemsToSubmit.length > 1 ? crypto.randomUUID() : null;
 
-      for (const item of itemsToSubmit) {
-        const needed = item.quantity;
-        const lotStock = item.maxQuantity; // สต็อกของ Lot ที่ผู้ใช้เลือก
-
-        if (lotStock === undefined || needed <= lotStock) {
-          // สต็อกพอใน Lot เดียว → ใช้ตามปกติ
-          resolvedRows.push({
-            drugId: item.drugId,
-            lotRowId: item.lotRowId,
-            lotNumber: item.lotNumber,
-            mfgDateRaw: item.mfgDateRaw,
-            expDateRaw: item.expDateRaw,
-            expDate: item.expDate,
-            drugName: item.drugName,
-            strength: item.strength,
-            drugType: item.drugType,
-            unit: item.unit,
-            unitPrice: item.unitPrice,
-            quantity: needed,
-          });
-        } else {
-          // สต็อกไม่พอใน Lot ที่เลือก → ดึง Lot อื่นของยาเดียวกันมาเสริม (FEFO)
-          const { data: allLots, error: lotErr } = await supabase
-            .from("v_dispensable_lots")
-            .select("lot_row_id, lot, quantity, mfg_date, exp_date, unit_price")
-            .eq("department_id", departmentId)
-            .eq("drug_id", item.drugId)
-            .gt("quantity", 0)
-            .order("exp_date", { ascending: true, nullsFirst: false });
-
-          if (lotErr) throw lotErr;
-
-          const totalAvail = (allLots || []).reduce((s, l) => s + l.quantity, 0);
-          if (totalAvail < needed) {
-            throw new Error(
-              `ยอดสต็อกรวมทุก Lot ของ "${item.drugName}" ไม่เพียงพอ\n` +
-              `ต้องการ: ${needed}  |  มีทั้งหมด: ${totalAvail}`
-            );
-          }
-
-          let remaining = needed;
-          for (const lotRow of allLots || []) {
-            if (remaining <= 0) break;
-            const take = Math.min(lotRow.quantity, remaining);
-            resolvedRows.push({
-              drugId: item.drugId,
-              lotRowId: lotRow.lot_row_id,
-              lotNumber: lotRow.lot,
-              mfgDateRaw: lotRow.mfg_date || "",
-              expDateRaw: lotRow.exp_date || "",
-              expDate: formatDate(lotRow.exp_date),
-              drugName: item.drugName,
-              strength: item.strength,
-              drugType: item.drugType,
-              unit: item.unit,
-              unitPrice: lotRow.unit_price ?? item.unitPrice,
-              quantity: take,
-            });
-            remaining -= take;
-          }
-        }
-      }
-
-      // ใช้ batch_group_id ร่วมกันทุกแถว เพื่อให้ประวัติรวมเป็นการ์ดเดียว
-      const batchGroupId = resolvedRows.length > 1 ? crypto.randomUUID() : null;
-
-      // 1. บันทึก stock_movements ทุกแถวพร้อมกัน (batch insert)
-      const rows = resolvedRows.map((item) => ({
+      // 1. บันทึกประวัติการจ่ายยาทุกรายการในตะกร้าลง stock_movements ในคำสั่งเดียว (batch insert)
+      // change_qty ติดลบเสมอ = จ่ายออก — ทุกแถวใช้ข้อมูลผู้ป่วย/หน่วยงาน/ผู้จ่ายชุดเดียวกัน ต่างกันแค่ยา/ล็อต/จำนวน
+      const rows = itemsToSubmit.map((item) => ({
         drug_id: item.drugId,
         department_id: departmentId,
         change_qty: -item.quantity,
@@ -1081,17 +1024,18 @@ const sourceDepartments = departments.filter((d) => d.is_home);
       const { error: insertError } = await supabase.from("stock_movements").insert(rows);
       if (insertError) throw insertError;
 
-      // 2. trigger `trg_apply_stock_movement` หักสต็อกอัตโนมัติ — ไม่ต้อง update drug_lots เอง
+      // 2. หักยอดสต็อกของทุกล็อตทำโดย trigger `trg_apply_stock_movement` อัตโนมัติ (ทำงานตอน insert ข้างบน)
+      // ไม่ต้อง .update() drug_lots เองอีก มิเช่นนั้นจะหักซ้ำ 2 เด้ง
 
-      // 3. ดึงยอดคงเหลือหลังหักแล้ว
-      const lotIds = [...new Set(resolvedRows.map((r) => r.lotRowId).filter(Boolean))];
+      // 3. ดึงยอดคงเหลือหลัง trigger หักสต็อกแล้ว
+      const lotIds = itemsToSubmit.map((item) => item.lotRowId);
       const { data: updatedLots } = await supabase
         .from("drug_lots")
         .select("id, quantity")
         .in("id", lotIds);
       const remainingMap = {};
       (updatedLots || []).forEach((lot) => { remainingMap[lot.id] = lot.quantity; });
-      const itemsWithRemaining = resolvedRows.map((item) => ({
+      const itemsWithRemaining = itemsToSubmit.map((item) => ({
         ...item,
         remainingStock: remainingMap[item.lotRowId] ?? "-",
       }));
@@ -1100,7 +1044,7 @@ const sourceDepartments = departments.filter((d) => d.is_home);
         ...swalBase,
         icon: "success",
         title: "บันทึกสำเร็จ",
-        text: `บันทึกข้อมูลและตัดสต็อกเรียบร้อยแล้ว (${resolvedRows.length} Lot)`,
+        text: `บันทึกข้อมูลและตัดสต็อกเรียบร้อยแล้ว (${itemsToSubmit.length} รายการ)`,
         timer: 1500,
         showConfirmButton: false,
       });
@@ -1112,7 +1056,7 @@ const sourceDepartments = departments.filter((d) => d.is_home);
 
     } catch (error) {
       console.error("Error dispensing drug:", error.message);
-      Swal.fire({ ...swalBase, icon: "error", title: "บันทึกไม่สำเร็จ", text: error.message });
+      alert("ล้มเหลว: " + error.message);
     } finally {
       setLoading(false);
     }
@@ -1439,7 +1383,7 @@ const sourceDepartments = departments.filter((d) => d.is_home);
               type="number" 
               required
               min="1"
-              {/* ไม่ใส่ max — ระบบ Auto-Split ข้าม Lot อัตโนมัติตอน submit */}
+              max={formData.maxQuantity || undefined}
               className="w-full rounded-lg border-2 border-[#007bff] px-3 py-2 text-base font-bold text-[#007bff] focus:outline-none h-11"
               value={formData.quantity}
               onChange={(e) => setFormData({...formData, quantity: e.target.value})}
