@@ -201,6 +201,110 @@ export function useDispenseHistory(searchTerm) {
   return { rows: filtered, loading, reload };
 }
 
+// ============================================================
+// submitDispenseMultiLot — จ่ายยาข้ามหลาย Lot อัตโนมัติ (FEFO)
+// ============================================================
+// ใช้แทน submitDispense เมื่อจำนวนที่ต้องการจ่าย (qty) อาจมากกว่า
+// ยอดคงเหลือใน Lot เดียว — ฟังก์ชันนี้จะ:
+//   1. ดึง Lot ทั้งหมดของยานั้นในหน่วยงาน เรียงหมดอายุก่อน (FEFO)
+//   2. แบ่งจำนวนจ่ายออกตาม Lot ไปเรื่อย ๆ จนครบ
+//   3. Insert stock_movements ทีละ Lot พร้อมกัน (Promise.all)
+//      โดยใช้ batch_group_id เดียวกัน เพื่อให้ประวัติรวมเป็นการ์ดเดียว
+//
+// payload รับค่าเดียวกับ submitDispense ยกเว้น:
+//   - change_qty  : จำนวน **บวก** ที่ต้องการจ่าย (ฟังก์ชันจะแปลงเป็นลบเอง)
+//   - lot         : ไม่ต้องส่ง (ฟังก์ชันดึงเองจาก DB)
+//   - lot_row_id  : ไม่ต้องส่ง (ฟังก์ชันดึงเองจาก DB)
+//
+// คืนค่า { error, lots } โดย lots = Lot ที่ถูกใช้จ่ายจริง (เพื่อแสดงใน UI)
+// คืน error "ยอดสต็อกไม่เพียงพอ" ถ้ายอดรวมทุก Lot < จำนวนที่ต้องการจ่าย
+export async function submitDispenseMultiLot(payload) {
+  const { change_qty, department_id, drug_id, ...rest } = payload;
+  const qtyNeeded = Math.abs(change_qty); // จำนวนที่ต้องการจ่าย (บวกเสมอ)
+
+  // 1. ดึง Lot ที่ยังมีสต็อก > 0 เรียง FEFO
+  const { data: lots, error: fetchError } = await supabase
+    .from("v_dispensable_lots")
+    .select("id, lot, quantity, exp_date")
+    .eq("department_id", department_id)
+    .eq("drug_id", drug_id)
+    .gt("quantity", 0)
+    .order("exp_date", { ascending: true, nullsFirst: false });
+
+  if (fetchError) return { error: fetchError, lots: [] };
+
+  // 2. ตรวจสอบยอดรวม
+  const totalAvailable = (lots ?? []).reduce((sum, l) => sum + l.quantity, 0);
+  if (totalAvailable < qtyNeeded) {
+    return {
+      error: new Error(
+        `ยอดสต็อกไม่เพียงพอ: ต้องการ ${qtyNeeded} แต่มีทั้งหมด ${totalAvailable} (รวม ${lots?.length ?? 0} Lot)`
+      ),
+      lots: [],
+    };
+  }
+
+  // 3. แบ่งจำนวนจ่ายตาม Lot (FEFO)
+  const dispenseLines = []; // [{ lotRow, qty }]
+  let remaining = qtyNeeded;
+
+  for (const lotRow of lots ?? []) {
+    if (remaining <= 0) break;
+    const take = Math.min(lotRow.quantity, remaining);
+    dispenseLines.push({ lotRow, qty: take });
+    remaining -= take;
+  }
+
+  // 4. สร้าง batch_group_id ร่วมกัน (UUID v4 ง่าย ๆ)
+  const batchGroupId = crypto.randomUUID();
+
+  // 5. Insert ทีละ Lot พร้อมกัน
+  const inserts = dispenseLines.map(({ lotRow, qty }) =>
+    supabase.from("stock_movements").insert({
+      ...rest,
+      department_id,
+      drug_id,
+      lot: lotRow.lot,
+      lot_row_id: lotRow.id,
+      change_qty: -qty, // ลบเสมอ
+      reason: "dispense",
+      batch_group_id: batchGroupId,
+    })
+  );
+
+  const results = await Promise.all(inserts);
+  const firstError = results.find((r) => r.error)?.error ?? null;
+  if (firstError) return { error: firstError, lots: [] };
+
+  // 6. สร้าง drug_targets อัตโนมัติ (เหมือน submitDispense เดิม)
+  if (department_id && drug_id) {
+    const { data: existing } = await supabase
+      .from("drug_targets")
+      .select("id")
+      .eq("department_id", department_id)
+      .eq("drug_id", drug_id)
+      .maybeSingle();
+
+    if (!existing) {
+      await supabase.from("drug_targets").insert({
+        department_id,
+        drug_id,
+        min_qty: null,
+        max_qty: null,
+      });
+    }
+  }
+
+  return {
+    error: null,
+    lots: dispenseLines.map(({ lotRow, qty }) => ({
+      lot: lotRow.lot,
+      exp_date: lotRow.exp_date,
+      qty_dispensed: qty,
+    })),
+  };
+}
+
 // บันทึกรายการจ่ายยา 1 ครั้ง — change_qty ต้องเป็นค่าลบเสมอ (จ่ายออก)
 export async function submitDispense(payload) {
   const { error } = await supabase.from("stock_movements").insert({
