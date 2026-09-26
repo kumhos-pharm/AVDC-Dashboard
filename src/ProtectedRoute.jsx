@@ -28,6 +28,15 @@ export default function ProtectedRoute({ children, allowedRoles, loginPath = "/l
 
   const role = profile?.role;
 
+  // ล็อกอินแล้วแต่ profile ยังโหลดไม่เสร็จ (session มีแต่ role ยังไม่มา) — รอก่อน ไม่ตัดสินว่าไม่มีสิทธิ์
+  if (allowedRoles && session && profile === null) {
+    return (
+      <div className="flex min-h-screen w-full items-center justify-center bg-[#eef1f6]">
+        <Loader2 className="h-6 w-6 animate-spin text-[#0d2a63]" />
+      </div>
+    );
+  }
+
   // ล็อกอินแล้วแต่ยังไม่มีบทบาท (ยังไม่ได้ถูก admin กำหนดสิทธิ์) หรือบทบาทไม่อยู่ในสิทธิ์ที่อนุญาตของหน้านี้
   if (allowedRoles && (!role || !allowedRoles.includes(role))) {
     return (
@@ -39,8 +48,8 @@ export default function ProtectedRoute({ children, allowedRoles, loginPath = "/l
             ? `บัญชีของคุณมีสิทธิ์ "${ROLE_LABELS[role] || role}" ซึ่งไม่สามารถเข้าถึงหน้านี้ได้`
             : "บัญชีของคุณยังไม่ได้รับการกำหนดสิทธิ์ กรุณาติดต่อผู้ดูแลระบบ"}
         </p>
-        <a href="/admin/dashboard" className="mt-2 rounded-xl bg-[#0d2a63] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#0a1f4d]">
-          กลับไปหน้าหลัก
+        <a href={loginPath} className="mt-2 rounded-xl bg-[#0d2a63] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#0a1f4d]">
+          กลับไปหน้าล็อกอิน
         </a>
       </div>
     );
