@@ -6,12 +6,40 @@ export function useDrugsAndDepartments() {
   const [drugs, setDrugs] = useState([]);
   const [departments, setDepartments] = useState([]);
 
-  useEffect(() => {
-    supabase.from("drugs").select("*").order("name").then(({ data }) => setDrugs(data ?? []));
-    supabase.from("departments").select("*").order("sort_order").then(({ data }) => setDepartments(data ?? []));
+  const reloadDepartments = useCallback(async () => {
+    const { data } = await supabase.from("departments").select("*").order("sort_order");
+    setDepartments(data ?? []);
   }, []);
 
-  return { drugs, departments };
+  useEffect(() => {
+    supabase.from("drugs").select("*").order("name").then(({ data }) => setDrugs(data ?? []));
+    reloadDepartments();
+  }, [reloadDepartments]);
+
+  return { drugs, departments, reloadDepartments };
+}
+
+// เพิ่มหน่วยงานใหม่ (ต่อท้ายลำดับสุดท้าย) คืนค่า { data, error }
+export async function addDepartment(name) {
+  const trimmed = (name || "").trim();
+  if (!trimmed) return { data: null, error: new Error("กรุณากรอกชื่อหน่วยงาน") };
+
+  const { data: existing, error: fetchErr } = await supabase
+    .from("departments")
+    .select("name, sort_order");
+  if (fetchErr) return { data: null, error: fetchErr };
+
+  if ((existing ?? []).some((d) => (d.name || "").trim().toLowerCase() === trimmed.toLowerCase())) {
+    return { data: null, error: new Error(`มีหน่วยงานชื่อ "${trimmed}" อยู่แล้ว`) };
+  }
+
+  const nextOrder = (existing ?? []).reduce((m, d) => Math.max(m, d.sort_order ?? 0), 0) + 1;
+  const { data, error } = await supabase
+    .from("departments")
+    .insert({ name: trimmed, sort_order: nextOrder })
+    .select()
+    .single();
+  return { data, error };
 }
 
 // ค้นหา "ล็อตยาที่จ่ายได้จริง" ของหน่วยงานที่เลือก เรียงหมดอายุก่อน (FEFO)

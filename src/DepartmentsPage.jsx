@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { Building2, Search, Pencil, Trash2, Check, XCircle, Loader2, AlertTriangle, PackageSearch, Undo2, PackageX } from "lucide-react";
-import { useDrugsAndDepartments } from "./useDispense";
+import { Building2, Plus, Search, Pencil, Trash2, Check, XCircle, Loader2, AlertTriangle, PackageSearch, Undo2, PackageX } from "lucide-react";
+import { useDrugsAndDepartments, addDepartment } from "./useDispense";
 import { useWarehouseLots, useWarehouseMinMax, updateLotDetails, updateMinMax, removeStockLot, returnLotToWarehouse } from "./useWarehouse";
 import StaffAutocomplete from "./StaffAutocomplete";
 import { alertSuccess, alertError, confirmAction } from "./alert";
@@ -393,7 +393,10 @@ function DeptLotRow({ lot, minMax, onDone, warehouseDept, isWarehouseView, deptN
 }
 
 export default function DepartmentsPage() {
-  const { departments } = useDrugsAndDepartments();
+  const { departments, reloadDepartments } = useDrugsAndDepartments();
+  const [showAddDept, setShowAddDept] = useState(false);
+  const [newDeptName, setNewDeptName] = useState("");
+  const [savingDept, setSavingDept] = useState(false);
   const warehouseDept = departments.find((d) => d.name === "คลังยา");
   const [activeDeptId, setActiveDeptId] = useState(null);
   const activeDept = departments.find((d) => String(d.id) === String(activeDeptId)) || departments[0];
@@ -402,6 +405,23 @@ export default function DepartmentsPage() {
 
   const { rows, loading, reload } = useWarehouseLots(activeDept?.id, search);
   const { map: minMax, reload: reloadMinMax } = useWarehouseMinMax(activeDept?.name);
+
+  async function handleAddDepartment(e) {
+    e?.preventDefault();
+    if (savingDept) return;
+    setSavingDept(true);
+    const { data, error } = await addDepartment(newDeptName);
+    setSavingDept(false);
+    if (error) {
+      alertError(error.message, "เพิ่มหน่วยงานไม่สำเร็จ");
+      return;
+    }
+    await reloadDepartments();
+    if (data?.id != null) setActiveDeptId(data.id);
+    setNewDeptName("");
+    setShowAddDept(false);
+    alertSuccess(`เพิ่มหน่วยงาน ${data?.name ?? ""} เรียบร้อยแล้ว`);
+  }
 
   function handleDone() {
     reload();
@@ -426,7 +446,47 @@ export default function DepartmentsPage() {
           <div className="xl:sticky xl:top-6 xl:self-start">
             <div className="overflow-hidden rounded-3xl border border-slate-200/70 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_24px_-12px_rgba(15,23,42,0.12)]">
               <div className="border-b border-slate-100 p-4">
-                <h2 className="text-sm font-bold" style={{ color: NAVY }}>รายชื่อหน่วยงาน</h2>
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-sm font-bold" style={{ color: NAVY }}>รายชื่อหน่วยงาน</h2>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddDept((v) => !v)}
+                    className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-white transition hover:opacity-90"
+                    style={{ backgroundColor: NAVY }}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    เพิ่มหน่วยงาน
+                  </button>
+                </div>
+                {showAddDept && (
+                  <form onSubmit={handleAddDepartment} className="mt-3 flex flex-col gap-2">
+                    <input
+                      autoFocus
+                      value={newDeptName}
+                      onChange={(e) => setNewDeptName(e.target.value)}
+                      placeholder="ชื่อหน่วยงานใหม่ เช่น MICU2"
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm outline-none transition focus:border-[#2f8fdc] focus:bg-white focus:ring-4 focus:ring-blue-50"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="submit"
+                        disabled={savingDept || !newDeptName.trim()}
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-white transition disabled:opacity-50"
+                        style={{ backgroundColor: NAVY }}
+                      >
+                        {savingDept ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                        บันทึก
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setShowAddDept(false); setNewDeptName(""); }}
+                        className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-500 transition hover:bg-slate-50"
+                      >
+                        ยกเลิก
+                      </button>
+                    </div>
+                  </form>
+                )}
               </div>
               <div className="flex flex-col gap-1 p-2">
                 {departments.length === 0 && (
