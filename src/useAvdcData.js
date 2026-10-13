@@ -37,8 +37,11 @@ export function useAvdcData() {
       return;
     }
 
-    const deptRows = deptRes.data ?? [];
-    const gridRows = gridRes.data ?? [];
+    // หน่วยงานที่ถูกซ่อน (is_active = false) จะไม่แสดงและไม่นับรวมในแดชบอร์ด
+    const deptRows = (deptRes.data ?? []).filter((d) => d.is_active !== false);
+    const activeDeptNames = new Set(deptRows.map((d) => d.name));
+    const activeDeptIds = new Set(deptRows.map((d) => d.id));
+    const gridRows = (gridRes.data ?? []).filter((r) => activeDeptNames.has(r.department_name));
 
     // ตาราง "drugs" คือ source of truth ของรายชื่อยาที่ยังใช้งานอยู่จริง (หน้าจัดการคลังยา/รายการยา ลบยาจากตารางนี้)
     // ส่วน v_dashboard_grid / v_warehouse_lots เป็น view ที่ pivot มาจากตาราง lot/สต็อกซึ่งอ้างชื่อยาแบบ text
@@ -64,7 +67,7 @@ export function useAvdcData() {
       });
 
     // เฉพาะ lot ของยาที่ยังมีอยู่จริงในตาราง drugs เท่านั้น (กันยาที่ถูกลบไปแล้วแต่ lot เก่ายังค้าง)
-    const validLots = (lotsRes.data ?? []).filter((l) => validDrugNames.has(l.drug_name));
+    const validLots = (lotsRes.data ?? []).filter((l) => validDrugNames.has(l.drug_name) && activeDeptIds.has(l.department_id));
 
     // เก็บ "ความแรง" และ "รูปแบบยา" ของยาแต่ละตัวจากข้อมูล lot (มาจากตาราง drugs ผ่าน view v_warehouse_lots)
     const strengthByDrug = {};
@@ -81,11 +84,15 @@ export function useAvdcData() {
       byDept: byDrugMap[name],
     }));
 
-    // ซ่อนยาที่ quantity รวมทุกหน่วยงาน = 0 (ยาที่ถูกลบออกหรือทดสอบแล้ว)
-    // ป้องกันไม่ให้โชว์ในแดชบอร์ดและรายการยา
-    const pivotedFiltered = pivoted.filter((drug) =>
-      Object.values(drug.byDept).some((cell) => cell && (cell.quantity ?? 0) > 0)
-    );
+    // แสดงยาทุกตัวที่ยังอยู่ในตาราง drugs แม้คงเหลือรวมเป็น 0 (เช่นจ่ายออกหมดแล้ว) เพื่อให้เห็นว่าต้องเติม
+    // ส่วนยาที่ถูกลบออกจากตาราง drugs ถูกกรองออกไปแล้วด้วย validDrugNames ด้านบน
+    // ยาที่ยังไม่มีแถวสต็อกในหน่วยงานใดเลย ให้แสดงเป็นแถวว่าง (ขีด "-" ทุกหน่วยงาน)
+    (drugsRes.data ?? []).forEach((d) => {
+      if (!byDrugMap[d.name]) {
+        pivoted.push({ name: d.name, strength: null, form: null, byDept: {} });
+      }
+    });
+    const pivotedFiltered = pivoted;
 
     // ถ้าหน่วยงานไหนไม่ได้ตั้ง Min/Max ของยาตัวนั้นไว้เอง ให้ใช้ค่า Min/Max ที่ตั้งไว้ที่ "คลังยา"
     // (ค่ากลางของยาตัวนั้น) เป็นค่า default แทน ไม่ต้องให้แต่ละหน่วยงานตั้งซ้ำทุกที่

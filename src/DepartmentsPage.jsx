@@ -1,8 +1,8 @@
-import React, { useState } from "react";
-import { Building2, Plus, Search, Pencil, Trash2, Check, XCircle, Loader2, AlertTriangle, PackageSearch, Undo2, PackageX } from "lucide-react";
-import { useDrugsAndDepartments, addDepartment } from "./useDispense";
+import React, { useEffect, useState } from "react";
+import { Building2, Plus, Search, Pencil, Trash2, Check, XCircle, Loader2, AlertTriangle, PackageSearch, Undo2, PackageX, Eye, EyeOff } from "lucide-react";
+import { useDrugsAndDepartments, addDepartment, renameDepartment, setDepartmentActive, deleteDepartment } from "./useDispense";
 import { useWarehouseLots, useWarehouseMinMax, updateLotDetails, updateMinMax, removeStockLot, returnLotToWarehouse } from "./useWarehouse";
-import StaffAutocomplete from "./StaffAutocomplete";
+import { useCurrentStaffName } from "./useCurrentStaffName";
 import { alertSuccess, alertError, confirmAction } from "./alert";
 
 
@@ -48,7 +48,7 @@ function StatusBadge({ qty, min, max }) {
 }
 
 // ---- แถวเดียวของตารางยาในหน่วยงาน พร้อมโหมดแก้ไขแบบ inline, ปุ่มคืนคลัง และปุ่มลบ ----
-function DeptLotRow({ lot, minMax, onDone, warehouseDept, isWarehouseView, deptName }) {
+function DeptLotRow({ lot, minMax, onDone, warehouseDept, isWarehouseView, deptName, currentStaffName }) {
   const [editing, setEditing] = useState(false);
   const [lotNo, setLotNo] = useState(lot.lot || "");
   const [qty, setQty] = useState(String(lot.quantity ?? ""));
@@ -56,16 +56,24 @@ function DeptLotRow({ lot, minMax, onDone, warehouseDept, isWarehouseView, deptN
   const [maxQty, setMaxQty] = useState("");
   const [mfgDate, setMfgDate] = useState("");
   const [expDate, setExpDate] = useState("");
-  const [staffName, setStaffName] = useState("");
+  const [staffName, setStaffName] = useState(currentStaffName || "");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [writingOff, setWritingOff] = useState(false);
   const [returning, setReturning] = useState(false);
   const [returnMode, setReturnMode] = useState(false);
   const [returnQty, setReturnQty] = useState(String(lot.quantity ?? ""));
-  const [returnStaff, setReturnStaff] = useState("");
+  const [returnStaff, setReturnStaff] = useState(currentStaffName || "");
   const [returnError, setReturnError] = useState(null);
   const [error, setError] = useState(null);
+
+  // ซิงค์ชื่อผู้บันทึกเมื่อโหลดชื่อผู้ใช้เสร็จ (กรณีโหลดช้ากว่าแถว)
+  useEffect(() => {
+    if (currentStaffName) {
+      setStaffName(currentStaffName);
+      setReturnStaff(currentStaffName);
+    }
+  }, [currentStaffName]);
 
   const mm = minMax[lot.drug_name] || {};
   const min = lot.min_qty ?? mm.min ?? null;
@@ -78,7 +86,7 @@ function DeptLotRow({ lot, minMax, onDone, warehouseDept, isWarehouseView, deptN
     setMaxQty(max ?? "");
     setMfgDate(toDateInput(lot.mfg_date));
     setExpDate(toDateInput(lot.exp_date));
-    setStaffName("");
+    setStaffName(currentStaffName || "");
     setError(null);
     setEditing(true);
   }
@@ -134,7 +142,7 @@ function DeptLotRow({ lot, minMax, onDone, warehouseDept, isWarehouseView, deptN
 
   function startReturn() {
     setReturnQty(String(lot.quantity ?? ""));
-    setReturnStaff("");
+    setReturnStaff(currentStaffName || "");
     setReturnError(null);
     setReturnMode(true);
   }
@@ -264,7 +272,13 @@ function DeptLotRow({ lot, minMax, onDone, warehouseDept, isWarehouseView, deptN
             </div>
             <div className="min-w-[180px]">
               <label className="mb-1 block text-xs font-medium text-slate-500">ผู้บันทึก</label>
-              <StaffAutocomplete value={returnStaff} onChange={setReturnStaff} />
+              <input
+                type="text"
+                readOnly
+                value={returnStaff}
+                placeholder="กำลังโหลดชื่อผู้บันทึก..."
+                className="w-full cursor-default rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700 outline-none"
+              />
             </div>
             <button
               onClick={handleReturn}
@@ -317,7 +331,13 @@ function DeptLotRow({ lot, minMax, onDone, warehouseDept, isWarehouseView, deptN
             </div>
             <div className="min-w-[180px]">
               <label className="mb-1 block text-xs font-medium text-slate-500">ผู้บันทึก</label>
-              <StaffAutocomplete value={staffName} onChange={setStaffName} />
+              <input
+                type="text"
+                readOnly
+                value={staffName}
+                placeholder="กำลังโหลดชื่อผู้บันทึก..."
+                className="w-full cursor-default rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700 outline-none"
+              />
             </div>
             <button
               onClick={handleSave}
@@ -393,7 +413,11 @@ function DeptLotRow({ lot, minMax, onDone, warehouseDept, isWarehouseView, deptN
 }
 
 export default function DepartmentsPage() {
-  const { departments, reloadDepartments } = useDrugsAndDepartments();
+  const { allDepartments: departments, reloadDepartments } = useDrugsAndDepartments();
+  const currentStaffName = useCurrentStaffName();
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [busyDept, setBusyDept] = useState(false);
   const [showAddDept, setShowAddDept] = useState(false);
   const [newDeptName, setNewDeptName] = useState("");
   const [savingDept, setSavingDept] = useState(false);
@@ -402,6 +426,10 @@ export default function DepartmentsPage() {
   const activeDept = departments.find((d) => String(d.id) === String(activeDeptId)) || departments[0];
   const isWarehouseView = !!activeDept && !!warehouseDept && activeDept.id === warehouseDept.id;
   const [search, setSearch] = useState("");
+
+  const isWarehouseDept = !!activeDept && activeDept.name === "คลังยา";
+  const isProtectedDept = isWarehouseDept || !!activeDept?.is_home; // คลังยา และหน่วยงานหลัก ห้ามซ่อน/ลบ
+  const isHiddenDept = activeDept?.is_active === false;
 
   const { rows, loading, reload } = useWarehouseLots(activeDept?.id, search);
   const { map: minMax, reload: reloadMinMax } = useWarehouseMinMax(activeDept?.name);
@@ -421,6 +449,64 @@ export default function DepartmentsPage() {
     setNewDeptName("");
     setShowAddDept(false);
     alertSuccess(`เพิ่มหน่วยงาน ${data?.name ?? ""} เรียบร้อยแล้ว`);
+  }
+
+  async function handleRenameDepartment(e) {
+    e?.preventDefault();
+    if (!activeDept || busyDept) return;
+    setBusyDept(true);
+    const { data, error } = await renameDepartment(activeDept.id, renameValue);
+    setBusyDept(false);
+    if (error) {
+      alertError(error.message, "เปลี่ยนชื่อหน่วยงานไม่สำเร็จ");
+      return;
+    }
+    await reloadDepartments();
+    setRenaming(false);
+    alertSuccess(`เปลี่ยนชื่อเป็น ${data?.name ?? renameValue.trim()} เรียบร้อยแล้ว`);
+  }
+
+  async function handleToggleHidden() {
+    if (!activeDept || busyDept) return;
+    const hide = !isHiddenDept;
+    const ok = await confirmAction({
+      title: hide ? `ซ่อนหน่วยงาน ${activeDept.name}?` : `แสดงหน่วยงาน ${activeDept.name} อีกครั้ง?`,
+      text: hide
+        ? "หน่วยงานจะไม่แสดงในแดชบอร์ดและรายการเลือกหน่วยงาน และไม่นับรวมยอดคงเหลือ แต่ข้อมูลยายังอยู่ครบ แสดงกลับได้ตลอด"
+        : "หน่วยงานจะกลับมาแสดงในแดชบอร์ดและรายการเลือกหน่วยงาน",
+      confirmText: hide ? "ซ่อน" : "แสดง",
+    });
+    if (!ok) return;
+    setBusyDept(true);
+    const { error } = await setDepartmentActive(activeDept.id, !hide);
+    setBusyDept(false);
+    if (error) {
+      alertError(error.message, hide ? "ซ่อนหน่วยงานไม่สำเร็จ" : "แสดงหน่วยงานไม่สำเร็จ");
+      return;
+    }
+    await reloadDepartments();
+    alertSuccess(hide ? `ซ่อน ${activeDept.name} แล้ว` : `แสดง ${activeDept.name} แล้ว`);
+  }
+
+  async function handleDeleteDepartment() {
+    if (!activeDept || busyDept) return;
+    const ok = await confirmAction({
+      title: `ลบหน่วยงาน ${activeDept.name} ถาวร?`,
+      text: "ลบได้เฉพาะหน่วยงานที่ไม่เคยมีล็อตยา การลบนี้ย้อนกลับไม่ได้ ถ้าไม่แน่ใจให้ใช้ \"ซ่อน\" แทน",
+      confirmText: "ลบถาวร",
+    });
+    if (!ok) return;
+    setBusyDept(true);
+    const { error } = await deleteDepartment(activeDept.id);
+    setBusyDept(false);
+    if (error) {
+      alertError(error.message, "ลบหน่วยงานไม่สำเร็จ");
+      return;
+    }
+    const deletedName = activeDept.name;
+    setActiveDeptId(null);
+    await reloadDepartments();
+    alertSuccess(`ลบ ${deletedName} เรียบร้อยแล้ว`);
   }
 
   function handleDone() {
@@ -503,7 +589,8 @@ export default function DepartmentsPage() {
                       }`}
                     >
                       <Building2 className={`h-4 w-4 ${active ? "text-white" : "text-slate-400"}`} />
-                      {d.name}
+                      <span className={d.is_active === false ? "opacity-60" : ""}>{d.name}</span>
+                      {d.is_active === false && <EyeOff className={`ml-auto h-3.5 w-3.5 ${active ? "text-white/70" : "text-slate-400"}`} />}
                     </button>
                   );
                 })}
@@ -520,8 +607,77 @@ export default function DepartmentsPage() {
                     <PackageSearch className="h-5 w-5" style={{ color: NAVY }} />
                   </span>
                   รายการยาที่ได้รับ ({activeDept?.name || "เลือกหน่วยงาน"})
+                  {isHiddenDept && (
+                    <span className="ml-1 flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">
+                      <EyeOff className="h-3 w-3" /> ซ่อนอยู่
+                    </span>
+                  )}
                 </h2>
+
+                {activeDept && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {!isWarehouseDept && (
+                      <button
+                        type="button"
+                        disabled={busyDept}
+                        onClick={() => { setRenameValue(activeDept.name); setRenaming((v) => !v); }}
+                        className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        <Pencil className="h-3.5 w-3.5" /> เปลี่ยนชื่อ
+                      </button>
+                    )}
+                    {!isProtectedDept && (
+                      <>
+                        <button
+                          type="button"
+                          disabled={busyDept}
+                          onClick={handleToggleHidden}
+                          className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          {isHiddenDept ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                          {isHiddenDept ? "แสดงหน่วยงาน" : "ซ่อนหน่วยงาน"}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busyDept}
+                          onClick={handleDeleteDepartment}
+                          className="flex items-center gap-1.5 rounded-xl border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" /> ลบ
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
+
+              {renaming && activeDept && (
+                <form onSubmit={handleRenameDepartment} className="mb-4 flex flex-wrap items-center gap-2">
+                  <input
+                    autoFocus
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    placeholder="ชื่อหน่วยงานใหม่"
+                    className="min-w-[220px] flex-1 rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm outline-none transition focus:border-[#2f8fdc] focus:bg-white focus:ring-4 focus:ring-blue-50"
+                  />
+                  <button
+                    type="submit"
+                    disabled={busyDept || !renameValue.trim() || renameValue.trim() === activeDept.name}
+                    className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white transition disabled:opacity-50"
+                    style={{ backgroundColor: NAVY }}
+                  >
+                    {busyDept ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                    บันทึกชื่อ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRenaming(false)}
+                    className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-500 transition hover:bg-slate-50"
+                  >
+                    ยกเลิก
+                  </button>
+                </form>
+              )}
 
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -558,6 +714,7 @@ export default function DepartmentsPage() {
                   )}
                   {rows.map((lot) => (
                     <DeptLotRow
+                      currentStaffName={currentStaffName}
                       key={lot.id ?? `${lot.drug_id}-${lot.lot}`}
                       lot={lot}
                       minMax={minMax}

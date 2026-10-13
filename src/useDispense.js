@@ -4,11 +4,11 @@ import { supabase } from "./supabaseClient";
 // รายชื่อยา + หน่วยงาน สำหรับ dropdown ในฟอร์ม
 export function useDrugsAndDepartments() {
   const [drugs, setDrugs] = useState([]);
-  const [departments, setDepartments] = useState([]);
+  const [allDepartments, setAllDepartments] = useState([]);
 
   const reloadDepartments = useCallback(async () => {
     const { data } = await supabase.from("departments").select("*").order("sort_order");
-    setDepartments(data ?? []);
+    setAllDepartments(data ?? []);
   }, []);
 
   useEffect(() => {
@@ -16,7 +16,12 @@ export function useDrugsAndDepartments() {
     reloadDepartments();
   }, [reloadDepartments]);
 
-  return { drugs, departments, reloadDepartments };
+  // departments = เฉพาะหน่วยงานที่ไม่ถูกซ่อน (ใช้ใน dropdown ของฟอร์มต่าง ๆ)
+  // allDepartments = รวมหน่วยงานที่ถูกซ่อน (ใช้ในหน้าจัดการหน่วยงาน)
+  // ถ้ายังไม่มีคอลัมน์ is_active ค่าจะเป็น undefined ซึ่งถือว่าแสดงตามปกติ
+  const departments = allDepartments.filter((d) => d.is_active !== false);
+
+  return { drugs, departments, allDepartments, reloadDepartments };
 }
 
 // เพิ่มหน่วยงานใหม่ (ต่อท้ายลำดับสุดท้าย) คืนค่า { data, error }
@@ -445,4 +450,61 @@ export async function updateDispense(id, payload) {
     };
   }
   return { error: null };
+}
+
+async function fetchDepartmentNames() {
+  return supabase.from("departments").select("id, name");
+}
+
+// เปลี่ยนชื่อหน่วยงาน (ข้อมูลยาผูกด้วย department_id จึงตามไปอัตโนมัติ)
+export async function renameDepartment(id, newName) {
+  const trimmed = (newName || "").trim();
+  if (!trimmed) return { error: new Error("กรุณากรอกชื่อหน่วยงาน") };
+
+  const { data: all, error: fetchErr } = await fetchDepartmentNames();
+  if (fetchErr) return { error: fetchErr };
+  if ((all ?? []).some((d) => String(d.id) !== String(id) && (d.name || "").trim().toLowerCase() === trimmed.toLowerCase())) {
+    return { error: new Error(`มีหน่วยงานชื่อ "${trimmed}" อยู่แล้ว`) };
+  }
+
+  const { data, error } = await supabase.from("departments").update({ name: trimmed }).eq("id", id).select();
+  if (error) return { error };
+  if (!data || data.length === 0) {
+    return { error: new Error("แก้ไขไม่สำเร็จ (อาจยังไม่ได้ตั้งสิทธิ์ UPDATE ของตาราง departments ใน Supabase)") };
+  }
+  return { data: data[0], error: null };
+}
+
+// ซ่อน/แสดงหน่วยงาน (ต้องมีคอลัมน์ is_active ในตาราง departments)
+export async function setDepartmentActive(id, active) {
+  const { data, error } = await supabase.from("departments").update({ is_active: active }).eq("id", id).select();
+  if (error) {
+    const missingCol = /is_active/.test(error.message || "");
+    return { error: missingCol ? new Error("ยังไม่มีคอลัมน์ is_active ในตาราง departments (ดูคำสั่ง SQL ที่แนะนำ)") : error };
+  }
+  if (!data || data.length === 0) {
+    return { error: new Error("แก้ไขไม่สำเร็จ (อาจยังไม่ได้ตั้งสิทธิ์ UPDATE ของตาราง departments ใน Supabase)") };
+  }
+  return { data: data[0], error: null };
+}
+
+// ลบหน่วยงาน: อนุญาตเฉพาะหน่วยงานที่ไม่มีประวัติล็อตยาเลย (ถ้ามีให้ใช้ "ซ่อน" แทน)
+export async function deleteDepartment(id) {
+  const { count, error: countErr } = await supabase
+    .from("drug_lots")
+    .select("id", { count: "exact", head: true })
+    .eq("department_id", id);
+  if (countErr) return { error: countErr };
+  if ((count ?? 0) > 0) {
+    return { error: new Error(`หน่วยงานนี้มีประวัติล็อตยา ${count} รายการ จึงลบไม่ได้ ให้ใช้ "ซ่อน" แทน`) };
+  }
+
+  const { data, error } = await supabase.from("departments").delete().eq("id", id).select();
+  if (error) {
+    return { error: new Error(`ลบไม่สำเร็จ: ${error.message} (ถ้ามีประวัติอื่นผูกอยู่ ให้ใช้ "ซ่อน" แทน)`) };
+  }
+  if (!data || data.length === 0) {
+    return { error: new Error("ลบไม่สำเร็จ (อาจยังไม่ได้ตั้งสิทธิ์ DELETE ของตาราง departments ใน Supabase)") };
+  }
+  return { data: data[0], error: null };
 }
