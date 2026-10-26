@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from "react";
-import { ListChecks, Search, Trash2, Loader2 } from "lucide-react";
-import { useDrugList, deleteDrug } from "./useDrugs";
+import React, { useMemo, useRef, useState } from "react";
+import { ListChecks, Search, Trash2, Loader2, Pencil, X, Check } from "lucide-react";
+import { useDrugList, deleteDrug, renameDrug } from "./useDrugs";
 import { alertSuccess, alertError, confirmAction } from "./alert";
 
 const NAVY = "#0d2a63";
@@ -9,6 +9,30 @@ export default function DrugsPage() {
   const { drugs, loading, reload } = useDrugList();
   const [search, setSearch] = useState("");
   const [deletingId, setDeletingId] = useState(null);
+  // inline rename state
+  const [renamingId, setRenamingId] = useState(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [renameSaving, setRenameSaving] = useState(false);
+  const renameInputRef = useRef(null);
+
+  const startRename = (drug) => {
+    setRenamingId(drug.id);
+    setRenameValue(drug.name);
+    setTimeout(() => renameInputRef.current?.focus(), 50);
+  };
+
+  const cancelRename = () => { setRenamingId(null); setRenameValue(""); };
+
+  const saveRename = async (drug) => {
+    if (!renameValue.trim() || renameValue.trim() === drug.name) { cancelRename(); return; }
+    setRenameSaving(true);
+    const { error } = await renameDrug(drug.id, drug.name, renameValue);
+    setRenameSaving(false);
+    if (error) { alertError(error.message); return; }
+    alertSuccess(`เปลี่ยนชื่อเป็น "${renameValue.trim()}" เรียบร้อยแล้ว`);
+    cancelRename();
+    reload();
+  };
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -83,22 +107,67 @@ export default function DrugsPage() {
                 <tbody className="divide-y divide-slate-100">
                   {filtered.map((d) => (
                     <tr key={d.id} className="hover:bg-slate-50/80">
-                      <td className="px-6 py-3.5 font-semibold text-slate-700">{d.name}</td>
+                      {/* ชื่อยา — inline rename เมื่อกดปุ่มดินสอ */}
+                      <td className="px-6 py-3 font-semibold text-slate-700">
+                        {renamingId === d.id ? (
+                          <div className="flex items-center gap-2">
+                            <input
+                              ref={renameInputRef}
+                              value={renameValue}
+                              onChange={(e) => setRenameValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") saveRename(d);
+                                if (e.key === "Escape") cancelRename();
+                              }}
+                              className="flex-1 rounded-lg border border-blue-400 bg-white px-2.5 py-1.5 text-sm text-slate-700 outline-none ring-2 ring-blue-100"
+                            />
+                            <button
+                              onClick={() => saveRename(d)}
+                              disabled={renameSaving}
+                              title="บันทึก"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                            >
+                              {renameSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                            </button>
+                            <button
+                              onClick={cancelRename}
+                              title="ยกเลิก"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <span>{d.name}</span>
+                        )}
+                      </td>
                       <td className="px-3 py-3.5 text-slate-500">{d.strength || <span className="text-slate-300">ยังไม่ระบุ</span>}</td>
                       <td className="px-3 py-3.5 text-slate-500">{d.form || <span className="text-slate-300">ยังไม่ระบุ</span>}</td>
                       <td className="px-3 py-3.5 text-center">
-                        <button
-                          onClick={() => handleDelete(d)}
-                          disabled={deletingId === d.id}
-                          title="ลบยานี้ออกจากระบบถาวร"
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-500 disabled:opacity-50"
-                        >
-                          {deletingId === d.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-4 w-4" />
-                          )}
-                        </button>
+                        <div className="flex items-center justify-center gap-1">
+                          {/* ปุ่มแก้ไขชื่อ */}
+                          <button
+                            onClick={() => startRename(d)}
+                            disabled={renamingId === d.id}
+                            title="แก้ไขชื่อยา (เปลี่ยนทั้งระบบ)"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-blue-50 hover:text-blue-500 disabled:opacity-30"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          {/* ปุ่มลบ */}
+                          <button
+                            onClick={() => handleDelete(d)}
+                            disabled={deletingId === d.id}
+                            title="ลบยานี้ออกจากระบบถาวร"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-500 disabled:opacity-50"
+                          >
+                            {deletingId === d.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

@@ -56,6 +56,34 @@ export async function deleteDrug(id) {
   return { error };
 }
 
+// เปลี่ยนชื่อยาทั้งระบบ — อัปเดตพร้อมกันใน drugs, drug_lots, stock_movements
+// (สองตารางหลังเก็บชื่อยาเป็น text ไม่ได้ผูกด้วย FK จึงต้องอัปเดตแยก)
+export async function renameDrug(id, oldName, newName) {
+  const trimmed = newName.trim();
+  if (!trimmed || trimmed === oldName) return { error: null };
+
+  // ตรวจว่าชื่อใหม่ซ้ำกับยาตัวอื่นในระบบไหม
+  const { data: dup } = await supabase
+    .from("drugs")
+    .select("id")
+    .ilike("name", trimmed)
+    .neq("id", id)
+    .maybeSingle();
+  if (dup) return { error: { message: `มียาชื่อ "${trimmed}" อยู่ในระบบแล้ว` } };
+
+  // 1. อัปเดตตาราง drugs (source of truth)
+  const { error: drugErr } = await supabase.from("drugs").update({ name: trimmed }).eq("id", id);
+  if (drugErr) return { error: drugErr };
+
+  // 2. อัปเดต drug_lots.drug_name (ถ้า view/report อ้างชื่อจากที่นี่)
+  await supabase.from("drug_lots").update({ drug_name: trimmed }).eq("drug_name", oldName);
+
+  // 3. อัปเดต stock_movements.drug_name (ประวัติการเคลื่อนไหว)
+  await supabase.from("stock_movements").update({ drug_name: trimmed }).eq("drug_name", oldName);
+
+  return { error: null };
+}
+
 // ใช้ตอน "รับยาเข้าคลัง": ถ้าพิมพ์ชื่อยาที่ยังไม่มีในระบบ ให้สร้างยาใหม่อัตโนมัติ
 // ถ้ามีอยู่แล้วแต่ยังไม่เคยระบุความแรง/รูปแบบยา ให้เติมข้อมูลให้ครบ
 export async function findOrCreateDrug({ name, strength, form }) {

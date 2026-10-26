@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Warehouse, Search, PackagePlus, Send, Loader2, Pencil, Trash2, X, XCircle, AlertTriangle, SquarePen, Undo2, ShoppingCart, Check, PackageX } from "lucide-react";
 import { useDrugsAndDepartments } from "./useDispense";
 import { useWarehouseLots, receiveStock, transferStock, removeStockLot, updateLotDetails, updateMinMax, useWarehouseMinMax, returnLotToWarehouse } from "./useWarehouse";
-import { findOrCreateDrug, updateDrug } from "./useDrugs";
+import { findOrCreateDrug, updateDrug, renameDrug } from "./useDrugs";
 import { alertSuccess, alertError, confirmAction } from "./alert";
 import { supabase } from "./supabaseClient";
 import { openReplenishPrintWindow } from "./printReplenish";
@@ -475,6 +475,28 @@ function LotRow({ lot, departments, minMax, onDone, onEdit, editingKey, currentS
   const [writingOff, setWritingOff] = useState(false);
   const [returning, setReturning] = useState(false);
   const [error, setError] = useState(null);
+  // inline rename
+  const [renaming, setRenaming] = useState(false);
+  const [renameVal, setRenameVal] = useState("");
+  const [renameSaving, setRenameSaving] = useState(false);
+  const renameRef = useRef(null);
+
+  const startRename = () => {
+    setRenameVal(lot.drug_name);
+    setRenaming(true);
+    setTimeout(() => renameRef.current?.focus(), 50);
+  };
+  const cancelRename = () => { setRenaming(false); setRenameVal(""); };
+  const saveRename = async () => {
+    if (!renameVal.trim() || renameVal.trim() === lot.drug_name) { cancelRename(); return; }
+    setRenameSaving(true);
+    const { error: err } = await renameDrug(lot.drug_id, lot.drug_name, renameVal);
+    setRenameSaving(false);
+    if (err) { alertError(err.message); return; }
+    alertSuccess(`เปลี่ยนชื่อเป็น "${renameVal.trim()}" เรียบร้อยแล้ว`);
+    cancelRename();
+    onDone?.();
+  };
 
   const warehouseDept = departments.find((d) => d.name === "คลังยา");
   const isWarehouseView = !!warehouseDept && lot.department_id === warehouseDept.id;
@@ -687,7 +709,38 @@ function LotRow({ lot, departments, minMax, onDone, onEdit, editingKey, currentS
   return (
     <>
       <tr className={`border-t border-slate-100 text-sm transition-colors hover:bg-slate-50/80 ${isBeingEdited ? "bg-amber-50/60" : ""}`}>
-        <td className="p-3 font-semibold text-slate-700">{lot.drug_name}</td>
+        <td className="p-3 font-semibold text-slate-700">
+          {renaming ? (
+            <div className="flex items-center gap-1.5">
+              <input
+                ref={renameRef}
+                value={renameVal}
+                onChange={(e) => setRenameVal(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") saveRename();
+                  if (e.key === "Escape") cancelRename();
+                }}
+                className="min-w-[140px] flex-1 rounded-lg border border-blue-400 bg-white px-2 py-1 text-sm text-slate-700 outline-none ring-2 ring-blue-100"
+              />
+              <button onClick={saveRename} disabled={renameSaving} title="บันทึก"
+                className="inline-flex h-6 w-6 items-center justify-center rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+                {renameSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+              </button>
+              <button onClick={cancelRename} title="ยกเลิก"
+                className="inline-flex h-6 w-6 items-center justify-center rounded bg-slate-100 text-slate-500 hover:bg-slate-200">
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1 group">
+              <span>{lot.drug_name}</span>
+              <button onClick={startRename} title="แก้ไขชื่อยา (เปลี่ยนทั้งระบบ)"
+                className="invisible group-hover:visible inline-flex h-5 w-5 items-center justify-center rounded text-slate-300 hover:bg-blue-50 hover:text-blue-500">
+                <Pencil className="h-3 w-3" />
+              </button>
+            </div>
+          )}
+        </td>
         <td className="p-3 text-slate-500">{lot.strength || "-"}</td>
         <td className="p-3 text-slate-500">{lot.form || "-"}</td>
         <td className="p-3 text-slate-500">{lot.lot}</td>
