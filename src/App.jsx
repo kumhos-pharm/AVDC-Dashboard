@@ -55,14 +55,17 @@ function AdminShell({ children }) {
     <div className="min-h-screen w-full bg-[#eef1f6]">
       <Sidebar />
       {/*
-        pb-24 (96px) แทน pb-20 (80px) — เพิ่ม clearance ให้ content ไม่ทับ nav bar ด้านล่าง
-        บน iOS มี home indicator เพิ่มอีก ~34px จึงต้องเผื่อไว้มากกว่าความสูง nav จริง
-        lg:pb-0  — จอใหญ่ (≥1024px) ใช้ sidebar ซ้าย ไม่มี bottom nav
-        lg:pl-24 — เว้นซ้ายให้ sidebar ซ้ายกว้าง 96px
-        isolate  — สร้าง stacking context ใหม่ ป้องกัน z-index ของ content ทับ nav
+        - lg:pl-24: เว้นซ้ายให้ sidebar บน desktop
+        - บน mobile/tablet: เพิ่ม padding-bottom ให้มากพอที่ content จะไม่ทับ bottom nav
+          ใช้ inline style แทน Tailwind เพื่อใช้ env() ของ iOS ได้
+        - overflow-x-hidden: ป้องกัน horizontal scroll
       */}
-      <div className="min-w-0 isolate pb-24 lg:pb-6 lg:pl-24"
-           style={{ paddingBottom: "max(96px, calc(72px + env(safe-area-inset-bottom)))" }}>
+      <div
+        className="min-w-0 overflow-x-hidden lg:pl-24 lg:pb-0"
+        style={{
+          paddingBottom: "calc(72px + env(safe-area-inset-bottom, 0px))",
+        }}
+      >
         {children}
       </div>
     </div>
