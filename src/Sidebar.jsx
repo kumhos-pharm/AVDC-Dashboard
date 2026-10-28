@@ -39,54 +39,45 @@ function NavItem({ icon: Icon, label, to, active, onClick }) {
 }
 
 // ปุ่มเมนูสำหรับแถบเมนูล่าง (มือถือ/แท็บเล็ต)
-// — touch target ขั้นต่ำ 44×44px ตาม iOS/Android guideline
-// — ใช้ min-w แทน flex-1 เพื่อป้องกันปุ่มแคบเกินไปบนจอเล็ก
-// — ไม่ซ้อน <span> หลายชั้น เพื่อให้ pointer/touch event ทำงานได้ทุก element
 function MobileNavItem({ icon: Icon, label, to, active, onClick }) {
-  const baseClass = [
-    "flex flex-col items-center justify-center",
-    "min-w-[48px] flex-1 min-h-[56px]",  // touch target ≥ 44px ทั้ง width และ height
-    "rounded-xl py-1.5 px-1",
+  const className = [
+    "flex flex-1 flex-col items-center justify-center",
+    "min-h-[52px] py-1.5 px-0.5 rounded-xl",   // min-h 52px = touch target ≥ 44px
     "text-center text-[9.5px] leading-tight",
-    "select-none",                          // ป้องกัน text highlight ตอน tap
+    "select-none cursor-pointer",
     "transition-colors",
-    "cursor-pointer",
     active ? "text-white" : "text-blue-100/70",
   ].join(" ");
 
-  const inner = (
+  // pointer-events-none บน child ทุกตัว ป้องกัน child รับ event แทน parent
+  const content = (
     <>
       <span
-        className={[
-          "flex items-center justify-center",
-          "w-10 h-8 rounded-lg mb-0.5",
-          "pointer-events-none",             // ให้ event ผ่านไปถึง Link/button แม่
-          active ? "bg-white/15" : "",
-        ].join(" ")}
+        className={`pointer-events-none flex h-8 w-10 items-center justify-center rounded-lg ${active ? "bg-white/15" : ""}`}
       >
-        <Icon className="h-5 w-5 pointer-events-none" strokeWidth={2} />
+        <Icon className="pointer-events-none h-5 w-5" strokeWidth={2} />
       </span>
-      <span className="truncate max-w-[56px] pointer-events-none">{label}</span>
+      <span className="pointer-events-none truncate max-w-[52px] mt-0.5">{label}</span>
     </>
   );
 
   if (to) {
     return (
-      <Link to={to} className={baseClass}>
-        {inner}
+      <Link to={to} className={className}>
+        {content}
       </Link>
     );
   }
 
   return (
+    // onTouchEnd + preventDefault แก้ปัญหา iOS Safari ที่ onClick ไม่ fire ใน fixed element
     <button
       type="button"
+      className={className}
       onClick={onClick}
-      className={baseClass}
-      // onTouchEnd รองรับ iOS Safari ที่บางครั้ง onClick ไม่ fire ใน fixed element
       onTouchEnd={(e) => { e.preventDefault(); onClick?.(); }}
     >
-      {inner}
+      {content}
     </button>
   );
 }
@@ -153,11 +144,12 @@ export default function Sidebar() {
 
       {/* แถบเมนูด้านล่าง — มือถือ/แท็บเล็ต (ซ่อนบนจอกว้าง lg ขึ้นไป และซ่อนตอนพิมพ์) */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-30 flex items-stretch gap-0.5 px-1.5 pt-1 shadow-[0_-2px_10px_rgba(0,0,0,0.15)] lg:hidden print:hidden"
+        className="fixed inset-x-0 bottom-0 z-50 flex items-stretch gap-0.5 px-1.5 pt-1 shadow-[0_-2px_10px_rgba(0,0,0,0.15)] lg:hidden print:hidden"
         style={{
           backgroundColor: NAVY,
-          // safe area สำหรับ iPhone notch/home indicator
-          paddingBottom: "max(env(safe-area-inset-bottom), 4px)",
+          paddingBottom: "max(env(safe-area-inset-bottom, 0px), 4px)",
+          // isolation ป้องกัน content ด้านหลังรับ touch แทน nav
+          isolation: "isolate",
         }}
       >
         {navLinks.map((item) => (
