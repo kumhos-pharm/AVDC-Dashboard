@@ -217,12 +217,7 @@ export default function LoginPage({
           <p className="mt-4 text-center text-xs" style={{ color: "#94a3b8" }}>
             ออกจากระบบอัตโนมัติเมื่อไม่มีการใช้งาน 10 นาที
           </p>
-          <p className="mt-3 text-center text-xs sm:text-sm" style={{ color: "#94a3b8" }}>
-            ยังไม่มีบัญชีผู้ใช้?{" "}
-            <span className="font-semibold" style={{ color: "#374151" }}>
-              ติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์
-            </span>
-          </p>
+        
         </div>
       </div>
     </div>
