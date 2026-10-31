@@ -86,7 +86,10 @@ export default function DispenseForm({ onSaved, editingRow, onCancelEdit }) {
   // โหมดของฟอร์ม: "dispense" = จ่ายยาให้ผู้ป่วย, "replenish" = เติมยาหน่วยงาน, "return" = รับคืนยาจากตึก
   const [mode, setMode] = useState("dispense");
   // state โหมดรับคืนยา
-  const [returnForm, setReturnForm] = useState({ drugName: "", lot: "", qty: "", ward: "", dest: "", expDate: "", staffName: "" });
+  const [returnForm, setReturnForm] = useState({ drugName: "", ward: "", dest: "", staffName: "" });
+  // รายการ Lot ที่คืน — คืนได้หลาย Lot ในการบันทึกครั้งเดียว (ยาตัวเดียวกัน แต่ละ Lot มีเลข Lot/จำนวน/วันหมดอายุของตัวเอง)
+  const EMPTY_RETURN_LOT = { lot: "", qty: "", expDate: "" };
+  const [returnLots, setReturnLots] = useState([EMPTY_RETURN_LOT]);
   const [returnLoading, setReturnLoading] = useState(false);
   const [allDrugs, setAllDrugs] = useState([]);
   const [drugSuggestions, setDrugSuggestions] = useState([]);
@@ -149,15 +152,36 @@ const sourceDepartments = departments.filter((d) => d.is_home);
     setShowDrugSug(false);
   };
 
-  // บันทึกคืนยา
+  // จัดการรายการ Lot ในโหมดรับคืนยา
+  const updateReturnLot = (index, key, value) =>
+    setReturnLots((prev) => prev.map((r, i) => (i === index ? { ...r, [key]: value } : r)));
+  const addReturnLot = () => setReturnLots((prev) => [...prev, { ...EMPTY_RETURN_LOT }]);
+  const removeReturnLot = (index) =>
+    setReturnLots((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
+  const returnTotalQty = returnLots.reduce((sum, r) => sum + (Number(r.qty) || 0), 0);
+
+  // บันทึกคืนยา — บันทึกทุก Lot ในคำสั่ง insert เดียว (สำเร็จทั้งหมดหรือไม่สำเร็จเลย ไม่มี Lot ตกหล่นครึ่งๆ กลางๆ)
   const handleReturnSubmit = async () => {
-    const { drugName, lot, qty, ward, dest, staffName } = returnForm;
-    if (!drugName.trim() || !lot.trim() || !qty || !ward || !dest) {
-      Swal.fire({ icon: "warning", title: "กรุณากรอกข้อมูลให้ครบ", timer: 1500, showConfirmButton: false }); return;
+    const { drugName, ward, dest, staffName } = returnForm;
+    const warn = (title, text) =>
+      Swal.fire({ icon: "warning", title, text, timer: 2200, showConfirmButton: false });
+
+    if (!drugName.trim() || !ward || !dest) {
+      warn("กรุณากรอกข้อมูลให้ครบ"); return;
     }
-    if (Number(qty) <= 0) {
-      Swal.fire({ icon: "warning", title: "จำนวนต้องมากกว่า 0", timer: 1500, showConfirmButton: false }); return;
+    for (let i = 0; i < returnLots.length; i++) {
+      const r = returnLots[i];
+      const label = returnLots.length > 1 ? ` (Lot ที่ ${i + 1})` : "";
+      if (!r.lot.trim()) { warn(`กรุณากรอก Lot Number${label}`); return; }
+      const q = Number(r.qty);
+      if (!q) { warn(`กรุณากรอกจำนวนที่คืน${label}`); return; }
+      if (q <= 0) { warn(`จำนวนต้องมากกว่า 0${label}`); return; }
     }
+    const lotKeys = returnLots.map((r) => r.lot.trim().toLowerCase());
+    if (new Set(lotKeys).size !== lotKeys.length) {
+      warn("มี Lot Number ซ้ำกัน", "ถ้าเป็น Lot เดียวกันให้รวมจำนวนไว้ในแถวเดียว"); return;
+    }
+
     setReturnLoading(true);
     const { data: drugData } = await supabase.from("drugs").select("id").ilike("name", drugName.trim()).maybeSingle();
     if (!drugData) {
@@ -165,16 +189,24 @@ const sourceDepartments = departments.filter((d) => d.is_home);
       Swal.fire({ icon: "error", title: "ไม่พบยาในระบบ", text: `ไม่พบ "${drugName}"` }); return;
     }
     const wardName = departments.find((d) => d.id === Number(ward))?.name ?? ward;
-    const { error } = await supabase.from("stock_movements").insert({
-      drug_id: drugData.id, department_id: Number(dest), lot: lot.trim(),
-      change_qty: Number(qty), reason: "return_from_ward",
-      exp_date: returnForm.expDate || null,
+    const rows = returnLots.map((r) => ({
+      drug_id: drugData.id, department_id: Number(dest), lot: r.lot.trim(),
+      change_qty: Number(r.qty), reason: "return_from_ward",
+      exp_date: r.expDate || null,
       note: `คืนจาก: ${wardName}`, staff_name: staffName.trim() || null,
-    });
+    }));
+    const { error } = await supabase.from("stock_movements").insert(rows);
     setReturnLoading(false);
     if (error) { Swal.fire({ icon: "error", title: "บันทึกไม่สำเร็จ", text: error.message }); return; }
-    Swal.fire({ icon: "success", title: "บันทึกคืนยาสำเร็จ", timer: 1500, showConfirmButton: false });
-    setReturnForm({ drugName: "", lot: "", qty: "", ward: "", dest: "", expDate: "", staffName: "" });
+    Swal.fire({
+      icon: "success",
+      title: "บันทึกคืนยาสำเร็จ",
+      text: rows.length > 1 ? `รับคืน ${rows.length} Lot รวม ${returnTotalQty} หน่วย` : undefined,
+      timer: 1500,
+      showConfirmButton: false,
+    });
+    setReturnForm({ drugName: "", ward: "", dest: "", staffName: "" });
+    setReturnLots([{ ...EMPTY_RETURN_LOT }]);
     if (onSaved) onSaved();
   };
 
@@ -667,7 +699,7 @@ const sourceDepartments = departments.filter((d) => d.is_home);
   };
 
   // สร้างข้อความสรุปการเติมยาหน่วยงาน สำหรับส่งเข้ากลุ่มไลน์
-  const buildReplenishMessage = (qty, destDeptName, remainingAtAvdc) => {
+  const buildReplenishMessage = (qty, destDeptName, remainingAtAvdc, lotLines = []) => {
     const sourceDeptName = departments.find((d) => String(d.id) === String(departmentId))?.name || "ศูนย์ AVDC (Phar-OPD)";
     const lines = [
       "📦 เติมยาหน่วยงาน! 🔄",
@@ -683,12 +715,23 @@ const sourceDepartments = departments.filter((d) => d.is_home);
     if (remainingAtAvdc !== undefined && remainingAtAvdc !== null) {
       lines.push(`📦 คงเหลือที่ AVDC: ${remainingAtAvdc} ${formData.unit || ""}`);
     }
-    lines.push(
-      `🏷️ Lot: ${formData.lotNumber || "-"}`,
-      `📅 EXP: ${formData.expDate || "-"}`,
-      "------------------------------",
-      `👤 ผู้บันทึก: ${formData.staff || "-"}`
-    );
+    if (lotLines.length > 1) {
+      // เติมข้ามหลาย Lot: แสดงทุก Lot ที่ถูกใช้ พร้อมจำนวนและวันหมดอายุ
+      lotLines.forEach((l) => {
+        lines.push(`🏷️ Lot ${l.lot || "-"} (EXP ${l.expDate || "-"}): ${l.qty} ${formData.unit || ""}`);
+      });
+      lines.push(
+        "------------------------------",
+        `👤 ผู้บันทึก: ${formData.staff || "-"}`
+      );
+    } else {
+      lines.push(
+        `🏷️ Lot: ${lotLines[0]?.lot || formData.lotNumber || "-"}`,
+        `📅 EXP: ${lotLines[0]?.expDate || formData.expDate || "-"}`,
+        "------------------------------",
+        `👤 ผู้บันทึก: ${formData.staff || "-"}`
+      );
+    }
     return lines.join("\n");
   };
 
@@ -804,99 +847,158 @@ const sourceDepartments = departments.filter((d) => d.is_home);
         alert("จำนวนที่เติมต้องมากกว่า 0");
         return;
       }
-      if (replenishQty > formData.maxQuantity) {
-        alert(`ยอดสต็อกไม่พอเติม (คงเหลือที่ AVDC: ${formData.maxQuantity})`);
-        return;
-      }
 
       const destDeptName = departments.find((d) => String(d.id) === String(destDepartmentId))?.name || "-";
 
       // รหัสจับคู่ระหว่างแถว replenish_out (AVDC) กับ replenish_in (หน่วยงานปลายทาง) ของการเติมยาครั้งนี้
       // ใช้ตอนกด "ยกเลิกการเติมยา" ในหน้าประวัติ เพื่อลบทั้งคู่พร้อมกันแบบแม่นยำ 100%
-      // (ไม่ต้องเดาจากยา/ล็อต/เวลา ซึ่งเสี่ยงจับคู่ผิดถ้ามีรายการซ้ำในเวลาใกล้กัน)
+      // เติมข้ามหลาย Lot ก็ใช้รหัสเดียวกันทุก Lot → กดยกเลิกครั้งเดียวคืนสต็อกครบทุก Lot
       const transferGroupId = crypto.randomUUID();
 
       setLoading(true);
       try {
-        // 1. บันทึกประวัติฝั่งตัดออกจาก AVDC ลง stock_movements
-        const { error: outError } = await supabase.from("stock_movements").insert([
+        // 0. วางแผนว่าจะเติมจาก Lot ไหนบ้าง (Auto Multi-Lot, FEFO)
+        // - สต็อกใน Lot ที่เลือกพอ → เติมจาก Lot นั้น Lot เดียวเหมือนเดิม
+        // - ไม่พอ → ใช้ Lot ที่เลือกก่อน แล้วดึง Lot อื่นของยาเดียวกันที่ AVDC เรียงหมดอายุก่อน มาเติมจนครบ
+        let plan = [
           {
-            drug_id: formData.drugId,
-            department_id: departmentId,
-            change_qty: -replenishQty,
-            reason: "replenish_out",
-            note: `เติมให้ ${destDeptName}`,
-            staff_name: formData.staff,
+            lotRowId: formData.lotRowId,
             lot: formData.lotNumber,
-            lot_row_id: formData.lotRowId,
-            mfg_date: formData.mfgDateRaw || null,
-            exp_date: formData.expDateRaw || null,
-            transfer_group_id: transferGroupId,
-            // ราคาต่อหน่วยของล็อตนี้ (จากคลังยา) พาไปด้วย เพื่อไม่ให้ราคาหายตอนโอนย้ายหน่วยงาน
-            unit_price: formData.unitPrice,
+            mfgDateRaw: formData.mfgDateRaw || null,
+            expDateRaw: formData.expDateRaw || null,
+            unitPrice: formData.unitPrice,
+            qty: replenishQty,
           },
-        ]);
-        if (outError) throw outError;
+        ];
+        let totalAvailable = formData.maxQuantity;
 
-        // 2. หักสต็อกล็อตต้นทางที่ AVDC ทำโดย trigger `trg_apply_stock_movement` อัตโนมัติจากขั้นตอนที่ 1
-        // (ไม่ต้อง .update() drug_lots เอง มิเช่นนั้นจะหักซ้ำ 2 เด้ง)
-        const newSourceQty = formData.maxQuantity - replenishQty; // ใช้แค่โชว์ในข้อความแจ้งเตือนเท่านั้น
+        if (replenishQty > formData.maxQuantity) {
+          const { data: otherLots, error: lotErr } = await supabase
+            .from("v_dispensable_lots")
+            .select("lot_row_id, lot, quantity, mfg_date, exp_date, unit_price")
+            .eq("department_id", departmentId)
+            .eq("drug_id", formData.drugId)
+            .gt("quantity", 0)
+            .neq("lot_row_id", formData.lotRowId)
+            .order("exp_date", { ascending: true, nullsFirst: false });
+          if (lotErr) throw lotErr;
 
-        // 3. หาล็อตเดิมที่หน่วยงานปลายทาง (ยา+เลขล็อตเดียวกัน)
-        // ถ้ามีอยู่แล้ว ไม่ต้อง update quantity เอง เดี๋ยว trigger จะบวกให้จากขั้นตอนที่ 4
-        // ถ้ายังไม่มี ต้องสร้างล็อตใหม่ไว้ก่อนเพื่อให้มี id ให้ trigger อ้างอิงได้ โดยตั้ง quantity เริ่มต้น = 0
-        // (ห้ามตั้งเป็นจำนวนที่เติมตรงนี้ เพราะ trigger จะมาบวกทับให้อีกที กลายเป็นบวกซ้ำ 2 เท่า)
-        const { data: existingLot, error: findError } = await supabase
-          .from("drug_lots")
-          .select("id, quantity")
-          .eq("drug_id", formData.drugId)
-          .eq("department_id", destDepartmentId)
-          .eq("lot", formData.lotNumber)
-          .maybeSingle();
-        if (findError) throw findError;
+          totalAvailable =
+            (formData.maxQuantity > 0 ? formData.maxQuantity : 0) +
+            (otherLots || []).reduce((sum, l) => sum + (l.quantity || 0), 0);
+          if (totalAvailable < replenishQty) {
+            throw new Error(
+              `ยอดสต็อกรวมทุก Lot ที่ AVDC ไม่เพียงพอ (ต้องการ ${replenishQty} แต่มีทั้งหมด ${totalAvailable})`
+            );
+          }
 
-        let destLotRowId = null;
-        if (existingLot) {
-          destLotRowId = existingLot.id;
-        } else {
-          const { data: newLot, error: destInsertError } = await supabase
-            .from("drug_lots")
-            .insert([
-              {
-                drug_id: formData.drugId,
-                department_id: destDepartmentId,
-                lot: formData.lotNumber,
-                mfg_date: formData.mfgDateRaw || null,
-                exp_date: formData.expDateRaw || null,
-                quantity: 0,
-              },
-            ])
-            .select()
-            .single();
-          if (destInsertError) throw destInsertError;
-          destLotRowId = newLot?.id || null;
+          plan = [];
+          let remaining = replenishQty;
+          if (formData.maxQuantity > 0) {
+            plan.push({
+              lotRowId: formData.lotRowId,
+              lot: formData.lotNumber,
+              mfgDateRaw: formData.mfgDateRaw || null,
+              expDateRaw: formData.expDateRaw || null,
+              unitPrice: formData.unitPrice,
+              qty: formData.maxQuantity,
+            });
+            remaining -= formData.maxQuantity;
+          }
+          for (const l of otherLots || []) {
+            if (remaining <= 0) break;
+            const take = Math.min(l.quantity, remaining);
+            plan.push({
+              lotRowId: l.lot_row_id,
+              lot: l.lot,
+              mfgDateRaw: l.mfg_date || null,
+              expDateRaw: l.exp_date || null,
+              unitPrice: l.unit_price ?? null,
+              qty: take,
+            });
+            remaining -= take;
+          }
         }
 
-        // 4. บันทึกประวัติฝั่งรับเข้าที่หน่วยงานปลายทาง (ไปโผล่ในเมนู "เติมยาหน่วยงาน" ของหน่วยงานนั้น)
-        const { error: inError } = await supabase.from("stock_movements").insert([
-          {
-            drug_id: formData.drugId,
-            department_id: destDepartmentId,
-            change_qty: replenishQty,
-            reason: "replenish_in",
-            note: "รับเติมจากศูนย์ AVDC",
-            staff_name: formData.staff,
-            lot: formData.lotNumber,
-            lot_row_id: destLotRowId,
-            mfg_date: formData.mfgDateRaw || null,
-            exp_date: formData.expDateRaw || null,
-            transfer_group_id: transferGroupId,
-            // ราคาต่อหน่วยเดียวกับฝั่งตัดออก (บรรทัดข้างบน) — ทำให้ล็อตที่หน่วยงานปลายทาง
-            // มีราคาให้ v_dispensable_lots ดึงไปใช้ตอนจ่ายยาต่อได้ทันที ไม่ต้องรอราคาจากที่อื่น
-            unit_price: formData.unitPrice,
-          },
-        ]);
-        if (inError) throw inError;
+        // ใช้แค่โชว์ในข้อความแจ้งเตือน: คงเหลือที่ AVDC หลังเติม
+        const newSourceQty = totalAvailable - replenishQty;
+
+        // วนเติมทีละ Lot ตามแผน
+        for (const line of plan) {
+          // 1. บันทึกประวัติฝั่งตัดออกจาก AVDC ลง stock_movements
+          // หักสต็อกล็อตต้นทางที่ AVDC ทำโดย trigger `trg_apply_stock_movement` อัตโนมัติ (ไม่ต้อง .update() drug_lots เอง)
+          const { error: outError } = await supabase.from("stock_movements").insert([
+            {
+              drug_id: formData.drugId,
+              department_id: departmentId,
+              change_qty: -line.qty,
+              reason: "replenish_out",
+              note: `เติมให้ ${destDeptName}`,
+              staff_name: formData.staff,
+              lot: line.lot,
+              lot_row_id: line.lotRowId,
+              mfg_date: line.mfgDateRaw,
+              exp_date: line.expDateRaw,
+              transfer_group_id: transferGroupId,
+              // ราคาต่อหน่วยของล็อตนี้ (จากคลังยา) พาไปด้วย เพื่อไม่ให้ราคาหายตอนโอนย้ายหน่วยงาน
+              unit_price: line.unitPrice,
+            },
+          ]);
+          if (outError) throw outError;
+
+          // 2. หาล็อตเดิมที่หน่วยงานปลายทาง (ยา+เลขล็อตเดียวกัน)
+          // ถ้ามีอยู่แล้ว trigger จะบวกให้จากขั้นตอนที่ 3 / ถ้ายังไม่มีต้องสร้างล็อตใหม่ quantity = 0 ไว้ก่อน
+          // (ห้ามตั้งเป็นจำนวนที่เติมตรงนี้ เพราะ trigger จะบวกทับให้อีกที กลายเป็นบวกซ้ำ 2 เท่า)
+          const { data: existingLot, error: findError } = await supabase
+            .from("drug_lots")
+            .select("id, quantity")
+            .eq("drug_id", formData.drugId)
+            .eq("department_id", destDepartmentId)
+            .eq("lot", line.lot)
+            .maybeSingle();
+          if (findError) throw findError;
+
+          let destLotRowId = null;
+          if (existingLot) {
+            destLotRowId = existingLot.id;
+          } else {
+            const { data: newLot, error: destInsertError } = await supabase
+              .from("drug_lots")
+              .insert([
+                {
+                  drug_id: formData.drugId,
+                  department_id: destDepartmentId,
+                  lot: line.lot,
+                  mfg_date: line.mfgDateRaw,
+                  exp_date: line.expDateRaw,
+                  quantity: 0,
+                },
+              ])
+              .select()
+              .single();
+            if (destInsertError) throw destInsertError;
+            destLotRowId = newLot?.id || null;
+          }
+
+          // 3. บันทึกประวัติฝั่งรับเข้าที่หน่วยงานปลายทาง
+          const { error: inError } = await supabase.from("stock_movements").insert([
+            {
+              drug_id: formData.drugId,
+              department_id: destDepartmentId,
+              change_qty: line.qty,
+              reason: "replenish_in",
+              note: "รับเติมจากศูนย์ AVDC",
+              staff_name: formData.staff,
+              lot: line.lot,
+              lot_row_id: destLotRowId,
+              mfg_date: line.mfgDateRaw,
+              exp_date: line.expDateRaw,
+              transfer_group_id: transferGroupId,
+              unit_price: line.unitPrice,
+            },
+          ]);
+          if (inError) throw inError;
+        }
 
         // 5. แดชบอร์ด (v_dashboard_grid) จะแสดงยาของหน่วยงานหนึ่ง ๆ ได้ก็ต่อเมื่อมีแถว drug_targets
         // (department_id, drug_id) อยู่แล้วเท่านั้น — ถ้าหน่วยงานปลายทางไม่เคยมียานี้ในรายการเป้าหมายมาก่อน
@@ -922,11 +1024,18 @@ const sourceDepartments = departments.filter((d) => d.is_home);
           ...swalBase,
           icon: "success",
           title: "เติมยาสำเร็จ",
-          text: `เติมยาให้ ${destDeptName} เรียบร้อยแล้ว`,
+          text: `เติมยาให้ ${destDeptName} เรียบร้อยแล้ว${plan.length > 1 ? ` (ดึงจาก ${plan.length} Lot ตามลำดับวันหมดอายุ)` : ""}`,
           timer: 1500,
           showConfirmButton: false,
         });
-        notifyLine(buildReplenishMessage(replenishQty, destDeptName, newSourceQty));
+        notifyLine(
+          buildReplenishMessage(
+            replenishQty,
+            destDeptName,
+            newSourceQty,
+            plan.map((l) => ({ lot: l.lot, expDate: formatDate(l.expDateRaw), qty: l.qty }))
+          )
+        );
 
         resetForm();
         fetchDrugs(departmentId);
@@ -1568,23 +1677,71 @@ const sourceDepartments = departments.filter((d) => d.is_home);
                 </ul>
               )}
             </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">Lot Number *</label>
-              <input type="text" placeholder="เช่น LK196049" value={returnForm.lot}
-                onChange={(e) => setReturnForm((f) => ({ ...f, lot: e.target.value }))}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700 placeholder-slate-300 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">จำนวนที่คืน *</label>
-              <input type="number" min="1" placeholder="0" value={returnForm.qty}
-                onChange={(e) => setReturnForm((f) => ({ ...f, qty: e.target.value }))}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-700 placeholder-slate-300 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">วันหมดอายุ</label>
-              <input type="date" value={returnForm.expDate}
-                onChange={(e) => setReturnForm((f) => ({ ...f, expDate: e.target.value }))}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100" />
+            {/* รายการ Lot ที่คืน — คืนได้หลาย Lot ในการบันทึกครั้งเดียว */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-slate-500">Lot ที่คืน *</label>
+                <button
+                  type="button"
+                  onClick={addReturnLot}
+                  className="inline-flex items-center gap-1 rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1.5 text-xs font-bold text-orange-600 transition-all hover:bg-orange-100 active:scale-95"
+                >
+                  <Plus className="h-3.5 w-3.5" /> เพิ่ม Lot
+                </button>
+              </div>
+
+              {returnLots.map((row, i) => (
+                <div key={i} className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-slate-400">Lot ที่ {i + 1}</span>
+                    {returnLots.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeReturnLot(i)}
+                        title="ลบ Lot นี้"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-500"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Lot Number เช่น LK196049"
+                    value={row.lot}
+                    onChange={(e) => updateReturnLot(i, "lot", e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 placeholder-slate-300 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="mb-1 block text-[11px] font-bold text-slate-400">จำนวนที่คืน</label>
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="0"
+                        value={row.qty}
+                        onChange={(e) => updateReturnLot(i, "qty", e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 placeholder-slate-300 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[11px] font-bold text-slate-400">วันหมดอายุ</label>
+                      <input
+                        type="date"
+                        value={row.expDate}
+                        onChange={(e) => updateReturnLot(i, "expDate", e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 placeholder-slate-300 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {returnLots.length > 1 && (
+                <p className="text-right text-xs font-bold text-slate-500">
+                  รวมทั้งหมด <span className="text-orange-500">{returnTotalQty}</span> หน่วย จาก {returnLots.length} Lot
+                </p>
+              )}
             </div>
             <div className="relative">
               <label className="block text-xs font-bold text-slate-500 mb-1">ผู้บันทึก</label>
